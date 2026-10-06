@@ -1,0 +1,21 @@
+name: Set up Swift
+description: Newest Xcode on the runner, and SwiftPM's downloads cached by Package.resolved.
+
+runs:
+  using: composite
+  steps:
+    - name: Select Xcode
+      shell: bash
+      run: |
+        sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+        swift --version
+    # Only the dependencies (the SDK's xcframework is most of it), never build products, so a cache hit
+    # cannot leave stale objects behind.
+    - uses: actions/cache@v4
+      with:
+        path: |
+          .build/artifacts
+          .build/checkouts
+          .build/repositories
+        key: spm-${{ runner.os }}-${{ hashFiles('Package.resolved') }}
+        restore-keys: spm-${{ runner.os }}-

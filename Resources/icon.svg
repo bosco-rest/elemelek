@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFF8EC"/><stop offset="1" stop-color="#F1E2C6"/></linearGradient>
+  <clipPath id="sq"><rect x="100" y="100" width="824" height="824" rx="186"/></clipPath>
+  <clipPath id="head"><circle cx="490" cy="610" r="250"/></clipPath>
+  <filter id="sh" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="14"/></filter>
+</defs>
+<rect x="100" y="112" width="824" height="824" rx="186" fill="#000" opacity="0.25" filter="url(#sh)"/>
+<rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+<g clip-path="url(#sq)">
+  <path d="M720 600 L860 650 L718 700 Z" fill="#C2620E"/>
+  <circle cx="490" cy="610" r="250" fill="#7A4A2E"/>
+  <g clip-path="url(#head)">
+    <ellipse cx="500" cy="740" rx="160" ry="82" fill="#F6F0E6"/>
+  </g>
+    <circle cx="610" cy="565" r="36" fill="#1F1A17"/>
+  <circle cx="622" cy="553" r="10" fill="#FFFFFF"/>
+  <g transform="rotate(-9 500 380)">
+    <path d="M330 400 Q330 170 500 170 Q670 170 670 400 Z" fill="#2346B0"/>
+    <rect x="330" y="340" width="340" height="56" fill="#E8559E"/>
+    <path d="M240 380 Q270 450 500 450 Q730 450 760 380 Q735 410 680 400 L320 400 Q265 410 240 380 Z" fill="#2346B0"/>
+  </g>
+</g>
+</svg>

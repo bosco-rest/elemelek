@@ -1,0 +1,23 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup
+      - name: Build
+        run: VERSION="${GITHUB_REF_NAME#v}" scripts/make-app.sh
+      - name: Package
+        run: scripts/make-dmg.sh "Elemelek-${GITHUB_REF_NAME}.dmg"
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "Elemelek-${GITHUB_REF_NAME}.dmg" --title "Elemelek ${GITHUB_REF_NAME#v}" --generate-notes
