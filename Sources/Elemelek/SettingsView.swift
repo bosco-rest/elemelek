@@ -171,12 +171,22 @@ private struct NotificationSettingsView: View {
 private struct PrivacySettings: View {
     @Environment(AppModel.self) var model
     @AppStorage(Setting.readReceipts.key) private var readReceipts = Setting.readReceipts.defaultValue
+    @AppStorage(Setting.showReadReceipts.key) private var showReadReceipts = Setting.showReadReceipts.defaultValue
+    @AppStorage(ReadReceiptStyle.key) private var readReceiptStyle = ReadReceiptStyle.defaultValue.rawValue
     @AppStorage(Setting.typingNotices.key) private var typing = Setting.typingNotices.defaultValue
     @State private var ignored: [String] = []
     var body: some View {
         Form {
             Section {
                 Toggle("Send read receipts", isOn: $readReceipts)
+                Toggle("Show read receipts in channels", isOn: $showReadReceipts)
+                if showReadReceipts {
+                    Picker("Display style", selection: $readReceiptStyle) {
+                        ForEach(ReadReceiptStyle.allCases, id: \.rawValue) { style in
+                            Text(style.title).tag(style.rawValue)
+                        }
+                    }
+                }
                 Toggle("Show when I'm typing", isOn: $typing)
             }
             Section("Blocked people") {

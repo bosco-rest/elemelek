@@ -4,7 +4,7 @@ import Foundation
 /// through `@AppStorage(Setting.banners.key)`, so a typo is a compile error rather than a setting that silently
 /// never changes.
 public enum Setting: String, CaseIterable, Sendable {
-    case banners, notificationSound, typingNotices, readReceipts, alwaysHD, linkPreviews
+    case banners, notificationSound, typingNotices, readReceipts, alwaysHD, linkPreviews, showReadReceipts
 
     public var key: String { rawValue }
 

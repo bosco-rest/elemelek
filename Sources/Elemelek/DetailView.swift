@@ -122,6 +122,8 @@ struct MessageRow: View {
     let showHeader: Bool
     let inThread: Bool
     @AppStorage(Setting.linkPreviews.key) private var linkPreviews = Setting.linkPreviews.defaultValue
+    @AppStorage(Setting.showReadReceipts.key) private var showReadReceipts = Setting.showReadReceipts.defaultValue
+    @AppStorage(ReadReceiptStyle.key) private var readReceiptStyle = ReadReceiptStyle.defaultValue.rawValue
     @State private var hovering = false
     @State private var showPicker = false
     @State private var confirmDelete = false
@@ -168,6 +170,11 @@ struct MessageRow: View {
                 if !inThread, row.threadReplies > 0, let id = row.eventID {
                     ThreadChip(count: row.threadReplies, latest: row.threadLatest) { Task { await model.openThread(id) } }
                         .padding(.top, 4)
+                }
+                if showReadReceipts, !row.readReceipts.isEmpty {
+                    ReadReceiptsView(receipts: row.readReceipts,
+                                     style: ReadReceiptStyle(rawValue: readReceiptStyle) ?? .avatarsAndNames)
+                        .padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)

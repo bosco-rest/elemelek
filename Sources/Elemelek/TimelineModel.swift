@@ -50,6 +50,7 @@ struct TimelineRow: Identifiable, Hashable {
     /// For a thread root: how many replies it has, and the newest one.
     var threadReplies = 0
     var threadLatest: String?
+    var readReceipts: [ReadReceipt] = []
 
     var hasImage: Bool { media?.kind == .image }
     var imageName: String? { media?.name }
@@ -92,6 +93,8 @@ final class TimelineModel {
         return c
     }()
     private var handle: TaskHandle?
+    private var memberProfiles: [String: (name: String, avatar: String?)] = [:]
+    private var pendingProfileFetches: Set<String> = []
 
     init(timeline: Timeline, client: Client, roomID: String, threadRoot: String? = nil) {
         self.timeline = timeline
@@ -106,6 +109,7 @@ final class TimelineModel {
             Task { @MainActor in self?.apply(diffs) }
         })
         await loadMore()
+        Task { [weak self] in await self?.loadRoomMembers() }
     }
 
     private var lastRead: String?
@@ -137,14 +141,24 @@ final class TimelineModel {
         var image: MediaSource?
         var media: MediaSource?
         var thumb: MediaSource?
+        var rawReceipts: [(userID: String, timestamp: UInt64?)] = []
     }
     private var entries: [Entry] = []
 
     private func entry(_ i: TimelineItem) -> Entry {
-        var en = Entry(row: Self.row(i, ownID: ownID))
+        var en = Entry(row: Self.row(i, ownID: ownID, profiles: memberProfiles))
         guard let e = i.asEvent() else { return en }
         en.id = "\(i.uniqueId().id)"
         en.eventID = e.eventOrTransactionId
+        if case .ready(let dn, _, let av, _, _) = e.senderProfile {
+            let name = dn ?? Self.senderName(e.sender, .unavailable)
+            memberProfiles[e.sender] = (name: name, avatar: av)
+        }
+        let receipts = e.readReceipts.compactMap { (userID, receipt) -> (userID: String, timestamp: UInt64?)? in
+            guard userID != ownID, userID != e.sender else { return nil }
+            return (userID: userID, timestamp: receipt.timestamp)
+        }
+        en.rawReceipts = receipts
         if case .msgLike(let m) = e.content, case .message(let c) = m.kind {
             switch c.msgType {
             case .image(let ic): en.image = ic.source; en.media = ic.source
@@ -181,6 +195,75 @@ final class TimelineModel {
             imageSources[en.id] = en.image
             mediaSources[en.id] = en.media
             thumbSources[en.id] = en.thumb
+        }
+        checkForMissingProfiles()
+    }
+
+    private func checkForMissingProfiles() {
+        let missing = Set(entries.flatMap { $0.rawReceipts.map(\.userID) })
+            .subtracting(memberProfiles.keys)
+            .subtracting(pendingProfileFetches)
+        guard !missing.isEmpty else { return }
+        pendingProfileFetches.formUnion(missing)
+        Task { [weak self] in
+            await self?.fetchMissingProfiles(missing)
+        }
+    }
+
+    private func fetchMissingProfiles(_ userIDs: Set<String>) async {
+        guard let room = try? client.getRoom(roomId: roomID) else { return }
+        var updated = false
+        for uid in userIDs {
+            if let m = try? await room.member(userId: uid) {
+                let name = m.displayName ?? Self.senderName(uid, .unavailable)
+                memberProfiles[uid] = (name: name, avatar: m.avatarUrl)
+                updated = true
+            }
+        }
+        pendingProfileFetches.subtract(userIDs)
+        if updated {
+            refreshReceipts()
+        }
+    }
+
+    private func loadRoomMembers() async {
+        guard let room = try? client.getRoom(roomId: roomID),
+              let it = try? await room.members() else { return }
+        var all: [RoomMember] = []
+        while let chunk = it.nextChunk(chunkSize: 200), all.count < 500 { all += chunk }
+        var updated = false
+        for m in all {
+            let name = m.displayName ?? Self.senderName(m.userId, .unavailable)
+            if memberProfiles[m.userId]?.name != name || memberProfiles[m.userId]?.avatar != m.avatarUrl {
+                memberProfiles[m.userId] = (name: name, avatar: m.avatarUrl)
+                updated = true
+            }
+        }
+        if updated {
+            refreshReceipts()
+        }
+    }
+
+    private func refreshReceipts() {
+        var changed = false
+        for i in 0..<entries.count {
+            guard !entries[i].rawReceipts.isEmpty else { continue }
+            let updated: [ReadReceipt] = entries[i].rawReceipts.map { r in
+                let prof = memberProfiles[r.userID]
+                let name = prof?.name ?? Self.senderName(r.userID, .unavailable)
+                let date = r.timestamp.map { Date(timeIntervalSince1970: Double($0) / 1000) }
+                return ReadReceipt(userID: r.userID, displayName: name, avatarURL: prof?.avatar, date: date)
+            }.sorted {
+                if let d1 = $0.date, let d2 = $1.date { return d1 > d2 }
+                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            if entries[i].row?.readReceipts != updated {
+                entries[i].row?.readReceipts = updated
+                changed = true
+            }
+        }
+        if changed {
+            rows = entries.compactMap(\.row)
         }
     }
 
@@ -255,7 +338,7 @@ final class TimelineModel {
         return icon + " " + (d.text.isEmpty ? media.name : d.text)
     }
 
-    static func row(_ item: TimelineItem, ownID: String) -> TimelineRow? {
+    static func row(_ item: TimelineItem, ownID: String, profiles: [String: (name: String, avatar: String?)] = [:]) -> TimelineRow? {
         guard let e = item.asEvent(), case .msgLike(let m) = e.content else { return nil }
         let d = describe(m)
         var eid: String?
@@ -280,11 +363,22 @@ final class TimelineModel {
             ReactionChip(key: r.key, count: r.senders.count, mine: r.senders.contains { $0.senderId == ownID },
                          names: r.senders.map { senderName($0.senderId, .unavailable) })
         }
+        let receipts: [ReadReceipt] = e.readReceipts.compactMap { (userID, receipt) in
+            guard userID != ownID, userID != e.sender else { return nil }
+            let prof = profiles[userID]
+            let name = prof?.name ?? senderName(userID, .unavailable)
+            let date = receipt.timestamp.map { Date(timeIntervalSince1970: Double($0) / 1000) }
+            return ReadReceipt(userID: userID, displayName: name, avatarURL: prof?.avatar, date: date)
+        }.sorted {
+            if let d1 = $0.date, let d2 = $1.date { return d1 > d2 }
+            return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+        }
         return TimelineRow(id: "\(item.uniqueId().id)", sender: senderName(e.sender, e.senderProfile), senderID: e.sender,
                            senderAvatar: { if case .ready(_, _, let u, _, _) = e.senderProfile { return u }; return nil }(),
                            locked: d.locked, text: d.text, isOwn: e.isOwn, date: Date(timeIntervalSince1970: Double(e.timestamp) / 1000),
                            eventID: eid, reactions: chips, isEditable: e.isEditable, isEdited: d.edited, reply: reply,
-                           media: d.media, threadRoot: m.threadRoot, threadReplies: replies, threadLatest: latest)
+                           media: d.media, threadRoot: m.threadRoot, threadReplies: replies, threadLatest: latest,
+                           readReceipts: receipts)
     }
 
     // MARK: Actions
