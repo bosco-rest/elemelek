@@ -155,7 +155,7 @@ final class TimelineModel {
             memberProfiles[e.sender] = (name: name, avatar: av)
         }
         let receipts = e.readReceipts.compactMap { (userID, receipt) -> (userID: String, timestamp: UInt64?)? in
-            guard userID != ownID, userID != e.sender else { return nil }
+            guard userID != ownID else { return nil }
             return (userID: userID, timestamp: receipt.timestamp)
         }
         en.rawReceipts = receipts
@@ -364,7 +364,7 @@ final class TimelineModel {
                          names: r.senders.map { senderName($0.senderId, .unavailable) })
         }
         let receipts: [ReadReceipt] = e.readReceipts.compactMap { (userID, receipt) in
-            guard userID != ownID, userID != e.sender else { return nil }
+            guard userID != ownID else { return nil }
             let prof = profiles[userID]
             let name = prof?.name ?? senderName(userID, .unavailable)
             let date = receipt.timestamp.map { Date(timeIntervalSince1970: Double($0) / 1000) }

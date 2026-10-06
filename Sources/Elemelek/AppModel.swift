@@ -250,7 +250,7 @@ final class AppModel {
         do {
             let t = try await room.timelineWithConfiguration(configuration: TimelineConfiguration(
                 focus: .live(hideThreadedEvents: true), filter: .all, internalIdPrefix: nil,
-                dateDividerMode: .daily, trackReadReceipts: .disabled, reportUtds: false))
+                dateDividerMode: .daily, trackReadReceipts: .allEvents, reportUtds: false))
             let m = TimelineModel(timeline: t, client: client, roomID: id)
             timeline = m
             await m.start()

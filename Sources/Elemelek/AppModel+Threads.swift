@@ -26,7 +26,7 @@ extension AppModel {
         do {
             let t = try await room.timelineWithConfiguration(configuration: TimelineConfiguration(
                 focus: .thread(rootEventId: rootEventID), filter: .all, internalIdPrefix: "thread-",
-                dateDividerMode: .daily, trackReadReceipts: .disabled, reportUtds: false))
+                dateDividerMode: .daily, trackReadReceipts: .allEvents, reportUtds: false))
             let m = TimelineModel(timeline: t, client: client, roomID: room.id(), threadRoot: rootEventID)
             thread = m
             await m.start()
