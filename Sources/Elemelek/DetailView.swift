@@ -14,7 +14,7 @@ struct DetailView: View {
                 header
                 if let tl = model.timeline {
                     // A new room is a new list: scroll place, paging state and anchor must not carry over.
-                    TimelineList(tl: tl, inThread: false).id(ObjectIdentifier(tl))
+                    TimelineList(tl: tl, inThread: false).id(tl.id)
                     TypingLine(names: model.typingNames)
                     Composer(tl: tl, inThread: false)
                 } else {
@@ -91,8 +91,8 @@ struct TimelineList: View {
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y < 300 } action: { nearTop = $1 }
         .task(id: PageKey(nearTop: nearTop, tick: tl.pageTick)) {
             // Let the jump back to the anchor land first, so the offset says where the reader really is.
-            // After a failed page, wait longer each time before asking again (up to half a minute).
-            let wait = tl.pageFailures == 0 ? 300 : min(30_000, 1_000 << min(tl.pageFailures, 5))
+            // After a failed page, wait longer each time; after a few, leave it to the "Try again" link.
+            guard let wait = PageRetry.delay(afterFailures: tl.pageFailures) else { return }
             try? await Task.sleep(for: .milliseconds(wait))
             guard !Task.isCancelled, nearTop, !tl.hitStart else { return }
             pageAnchor = tl.rows.first?.id

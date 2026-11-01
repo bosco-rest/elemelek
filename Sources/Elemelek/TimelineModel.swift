@@ -64,7 +64,9 @@ final class TLListener: TimelineListener, @unchecked Sendable {
 
 /// One timeline: a room's main one, or a single thread. Owns its rows and everything you do to them.
 @MainActor @Observable
-final class TimelineModel {
+final class TimelineModel: Identifiable {
+    /// Unique for the life of the app, unlike an object address that a later model may reuse.
+    let id = UUID()
     let timeline: Timeline
     let threadRoot: String?
     let roomID: String
@@ -96,7 +98,10 @@ final class TimelineModel {
         c.totalCostLimit = 48 << 20
         return c
     }()
-    private var handle: TaskHandle?
+    @ObservationIgnored private nonisolated(unsafe) var handle: TaskHandle?
+    /// Diffs from the SDK, in the order it sent them; finished when the model goes, which ends its reader.
+    private let diffs: AsyncStream<[TimelineDiff]>
+    private let diffSink: AsyncStream<[TimelineDiff]>.Continuation
     private var memberProfiles: [String: (name: String, avatar: String?)] = [:]
     private var pendingProfileFetches: Set<String> = []
 
@@ -106,12 +111,18 @@ final class TimelineModel {
         self.roomID = roomID
         self.threadRoot = threadRoot
         self.ownID = (try? client.userId()) ?? ""
+        (diffs, diffSink) = AsyncStream.makeStream(of: [TimelineDiff].self)
+    }
+
+    deinit {
+        handle?.cancel()
+        diffSink.finish()
     }
 
     func start() async {
         // Diffs are positional (insert at 3, remove 7), so they must be applied in the order they were sent.
         // A Task per callback does not promise that; one stream read by one task does.
-        let (diffs, sink) = AsyncStream.makeStream(of: [TimelineDiff].self)
+        let diffs = diffs, sink = diffSink
         handle = await timeline.addListener(listener: TLListener { sink.yield($0) })
         Task { [weak self] in
             for await d in diffs {

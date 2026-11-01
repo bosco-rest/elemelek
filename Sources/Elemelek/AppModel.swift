@@ -237,7 +237,13 @@ final class AppModel {
 
     // MARK: Rooms and threads
 
+    /// Bumped by every `select` and `openThread`; a call that finds it moved on was overtaken and drops its result.
+    var roomOpening = 0
+    var threadOpening = 0
+
     func select(_ id: String?) async {
+        roomOpening += 1
+        let mine = roomOpening
         selectedRoomID = id
         timeline = nil; thread = nil; sidePanel = .none; typingHandle = nil; typingNames = []
         threads = []; rawThreads = []; threadService = nil; threadHandle = nil; threadPageHandle = nil
@@ -256,8 +262,8 @@ final class AppModel {
             let t = try await room.timelineWithConfiguration(configuration: TimelineConfiguration(
                 focus: .live(hideThreadedEvents: true), filter: .all, internalIdPrefix: nil,
                 dateDividerMode: .daily, trackReadReceipts: .allEvents, reportUtds: false))
-            // Another room was picked while this one was opening: its timeline wins, whichever finishes last.
-            guard selectedRoomID == id else { return }
+            // A room was picked again while this one was opening (even the same one): the later pick wins.
+            guard roomOpening == mine else { return }
             let m = TimelineModel(timeline: t, client: client, roomID: id)
             timeline = m
             await m.start()
@@ -265,7 +271,7 @@ final class AppModel {
             m.markRead(force: true)
         } catch {
             Log.timeline.error("open room failed: \(error.localizedDescription, privacy: .public)")
-            if selectedRoomID == id { self.error = "\(error)" }
+            if roomOpening == mine { self.error = "\(error)" }
         }
     }
 
