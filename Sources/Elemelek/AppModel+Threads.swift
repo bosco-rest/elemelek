@@ -21,16 +21,23 @@ extension AppModel {
     /// Open one thread in the side panel; a message without replies yet becomes a thread when you answer in it.
     func openThread(_ rootEventID: String) async {
         guard let room = currentRoom, let client else { return }
+        threadOpening += 1
+        let mine = threadOpening
         sidePanel = .thread(rootEventID)
         thread = nil
         do {
             let t = try await room.timelineWithConfiguration(configuration: TimelineConfiguration(
                 focus: .thread(rootEventId: rootEventID), filter: .all, internalIdPrefix: "thread-",
                 dateDividerMode: .daily, trackReadReceipts: .allEvents, reportUtds: false))
+            // Another thread or room was opened meanwhile; don't put this one over it.
+            guard threadOpening == mine, sidePanel == .thread(rootEventID), currentRoom === room else { return }
             let m = TimelineModel(timeline: t, client: client, roomID: room.id(), threadRoot: rootEventID)
             thread = m
             await m.start()
-        } catch { self.error = "\(error)" }
+        } catch {
+            Log.timeline.error("open thread failed: \(error.localizedDescription, privacy: .public)")
+            self.error = "\(error)"
+        }
     }
 
     func closeThread() { thread = nil; sidePanel = .none }

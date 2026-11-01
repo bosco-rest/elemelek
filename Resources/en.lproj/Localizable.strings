@@ -61,6 +61,7 @@
 "Close" = "Close";
 "Save" = "Save";
 "Start of the conversation" = "Start of the conversation";
+"Couldn't load older messages" = "Couldn't load older messages";
 "Toggle sidebar" = "Toggle sidebar";
 "No results" = "No results";
 "Show link previews" = "Show link previews";
