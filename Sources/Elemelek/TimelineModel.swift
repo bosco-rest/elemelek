@@ -77,6 +77,10 @@ final class TimelineModel {
     var error: String?
     var hitStart = false
     var loadingMore = false
+    /// Why the last page of older messages failed, if it did; cleared by the next page that loads.
+    var pageError: String?
+    /// Pages failed in a row, so retries back off instead of hammering a server that is down.
+    var pageFailures = 0
     /// Bumped after every finished page, so a spinner that is still on screen asks for the next one.
     var pageTick = 0
     var attachments: [Attachment] = []
@@ -105,9 +109,16 @@ final class TimelineModel {
     }
 
     func start() async {
-        handle = await timeline.addListener(listener: TLListener { [weak self] diffs in
-            Task { @MainActor in self?.apply(diffs) }
-        })
+        // Diffs are positional (insert at 3, remove 7), so they must be applied in the order they were sent.
+        // A Task per callback does not promise that; one stream read by one task does.
+        let (diffs, sink) = AsyncStream.makeStream(of: [TimelineDiff].self)
+        handle = await timeline.addListener(listener: TLListener { sink.yield($0) })
+        Task { [weak self] in
+            for await d in diffs {
+                guard let self else { return }
+                self.apply(d)
+            }
+        }
         await loadMore()
         Task { [weak self] in await self?.loadRoomMembers() }
     }
@@ -128,7 +139,14 @@ final class TimelineModel {
         guard !loadingMore, !hitStart else { return }
         loadingMore = true
         defer { loadingMore = false; pageTick += 1 }
-        do { hitStart = try await timeline.paginateBackwards(numEvents: 40) } catch { self.error = "\(error)" }
+        do {
+            hitStart = try await timeline.paginateBackwards(numEvents: 40)
+            pageError = nil; pageFailures = 0
+        } catch {
+            // Kept apart from `error` (a failed send): one bad page must not stop paging for good.
+            Log.timeline.error("load older messages failed: \(error.localizedDescription, privacy: .public)")
+            pageError = "\(error)"; pageFailures += 1
+        }
     }
 
     // MARK: Diffs

@@ -13,7 +13,8 @@ struct DetailView: View {
             VStack(spacing: 0) {
                 header
                 if let tl = model.timeline {
-                    TimelineList(tl: tl, inThread: false)
+                    // A new room is a new list: scroll place, paging state and anchor must not carry over.
+                    TimelineList(tl: tl, inThread: false).id(ObjectIdentifier(tl))
                     TypingLine(names: model.typingNames)
                     Composer(tl: tl, inThread: false)
                 } else {
@@ -64,7 +65,8 @@ struct TimelineList: View {
     @Bindable var tl: TimelineModel
     let inThread: Bool
     @State private var position = ScrollPosition(idType: String.self)
-    @State private var nearTop = false
+    /// Starts true: a short room never scrolls, so the change that would set it might never come.
+    @State private var nearTop = true
     @State private var pageAnchor: String?
 
     /// Lazy, so only rows near the viewport hold views and layers; pictures reserve their size up front
@@ -89,8 +91,10 @@ struct TimelineList: View {
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y < 300 } action: { nearTop = $1 }
         .task(id: PageKey(nearTop: nearTop, tick: tl.pageTick)) {
             // Let the jump back to the anchor land first, so the offset says where the reader really is.
-            try? await Task.sleep(for: .milliseconds(300))
-            guard !Task.isCancelled, nearTop, tl.error == nil, !tl.hitStart else { return }
+            // After a failed page, wait longer each time before asking again (up to half a minute).
+            let wait = tl.pageFailures == 0 ? 300 : min(30_000, 1_000 << min(tl.pageFailures, 5))
+            try? await Task.sleep(for: .milliseconds(wait))
+            guard !Task.isCancelled, nearTop, !tl.hitStart else { return }
             pageAnchor = tl.rows.first?.id
             await tl.loadMore()
         }
@@ -109,6 +113,12 @@ struct TimelineList: View {
         if tl.hitStart {
             Text("Start of the conversation").font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
                 .frame(maxWidth: .infinity).padding(.vertical, 14)
+        } else if tl.pageError != nil {
+            HStack(spacing: 8) {
+                Text("Couldn't load older messages").font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                Button("Try again") { Task { await tl.loadMore() } }.buttonStyle(.link).font(Theme.font(size: 11))
+            }
+            .frame(maxWidth: .infinity).padding(.vertical, 14)
         } else {
             ProgressView().controlSize(.small).frame(maxWidth: .infinity).padding(.vertical, 14)
         }

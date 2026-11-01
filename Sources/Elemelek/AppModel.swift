@@ -243,7 +243,12 @@ final class AppModel {
         threads = []; rawThreads = []; threadService = nil; threadHandle = nil; threadPageHandle = nil
         // The old room's rows and pictures are gone now; hand the freed pages back instead of keeping them.
         malloc_zone_pressure_relief(nil, 0)
-        guard let id, let room = roomObjects.first(where: { $0.id() == id }), let client else { return }
+        guard let id, let client else { return }
+        // A room the list has not shown yet (a notification clicked at launch, a room just joined) is still a room.
+        guard let room = roomObjects.first(where: { $0.id() == id }) ?? (try? client.getRoom(roomId: id)) else {
+            Log.timeline.error("open room failed: not in the room list yet")
+            return
+        }
         currentRoom = room
         typingSent = nil
         watchTyping(room)
@@ -251,11 +256,17 @@ final class AppModel {
             let t = try await room.timelineWithConfiguration(configuration: TimelineConfiguration(
                 focus: .live(hideThreadedEvents: true), filter: .all, internalIdPrefix: nil,
                 dateDividerMode: .daily, trackReadReceipts: .allEvents, reportUtds: false))
+            // Another room was picked while this one was opening: its timeline wins, whichever finishes last.
+            guard selectedRoomID == id else { return }
             let m = TimelineModel(timeline: t, client: client, roomID: id)
             timeline = m
             await m.start()
+            guard timeline === m else { return }
             m.markRead(force: true)
-        } catch { self.error = "\(error)" }
+        } catch {
+            Log.timeline.error("open room failed: \(error.localizedDescription, privacy: .public)")
+            if selectedRoomID == id { self.error = "\(error)" }
+        }
     }
 
 

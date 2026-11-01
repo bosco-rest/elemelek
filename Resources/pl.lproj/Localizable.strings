@@ -61,6 +61,7 @@
 "Close" = "Zamknij";
 "Save" = "Zapisz";
 "Start of the conversation" = "Początek rozmowy";
+"Couldn't load older messages" = "Nie udało się wczytać starszych wiadomości";
 "Toggle sidebar" = "Pokaż lub ukryj panel boczny";
 "No results" = "Brak wyników";
 "Show link previews" = "Pokazuj podglądy linków";

@@ -103,7 +103,7 @@ private struct ThreadPanel: View {
     var body: some View {
         PanelHeader(title: "Thread", back: { Task { await model.showThreads() } }) { model.closeThread() }
         if let tl = model.thread {
-            TimelineList(tl: tl, inThread: true)
+            TimelineList(tl: tl, inThread: true).id(ObjectIdentifier(tl))
             Composer(tl: tl, inThread: true)
         } else {
             ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)

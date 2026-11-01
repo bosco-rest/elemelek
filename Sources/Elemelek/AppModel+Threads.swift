@@ -27,10 +27,15 @@ extension AppModel {
             let t = try await room.timelineWithConfiguration(configuration: TimelineConfiguration(
                 focus: .thread(rootEventId: rootEventID), filter: .all, internalIdPrefix: "thread-",
                 dateDividerMode: .daily, trackReadReceipts: .allEvents, reportUtds: false))
+            // Another thread or room was opened meanwhile; don't put this one over it.
+            guard sidePanel == .thread(rootEventID), currentRoom === room else { return }
             let m = TimelineModel(timeline: t, client: client, roomID: room.id(), threadRoot: rootEventID)
             thread = m
             await m.start()
-        } catch { self.error = "\(error)" }
+        } catch {
+            Log.timeline.error("open thread failed: \(error.localizedDescription, privacy: .public)")
+            self.error = "\(error)"
+        }
     }
 
     func closeThread() { thread = nil; sidePanel = .none }
