@@ -70,6 +70,8 @@ final class TimelineModel: Identifiable {
     let timeline: Timeline
     let threadRoot: String?
     let roomID: String
+    /// Thread counts by root event ID, from the thread list; used where the event itself carries no summary.
+    var threadInfo: [String: ThreadInfo] = [:] { didSet { if threadInfo != oldValue { rebuildRows() } } }
     private let client: Client
     private let ownID: String
 
@@ -216,7 +218,7 @@ final class TimelineModel: Identifiable {
             case .reset(let v): entries = v.map(entry)
             }
         }
-        rows = entries.compactMap(\.row)
+        rebuildRows()
         markRead()
         itemIDs = [:]; imageSources = [:]; mediaSources = [:]; thumbSources = [:]
         for en in entries where !en.id.isEmpty {
@@ -226,6 +228,17 @@ final class TimelineModel: Identifiable {
             thumbSources[en.id] = en.thumb
         }
         checkForMissingProfiles()
+    }
+
+    private func rebuildRows() {
+        rows = entries.compactMap { en in
+            guard var r = en.row else { return nil }
+            if let id = r.eventID {
+                (r.threadReplies, r.threadLatest) = ThreadInfo.merge(replies: r.threadReplies, latest: r.threadLatest,
+                                                                     with: threadInfo[id])
+            }
+            return r
+        }
     }
 
     private func checkForMissingProfiles() {

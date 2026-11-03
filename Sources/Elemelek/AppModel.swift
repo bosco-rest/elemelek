@@ -269,6 +269,11 @@ final class AppModel {
             await m.start()
             guard timeline === m else { return }
             m.markRead(force: true)
+            // The SDK often leaves a root's thread summary empty; the thread list knows the counts.
+            Task { [weak self] in
+                guard let self, self.roomOpening == mine else { return }
+                await self.startThreadList(room, allPages: true)
+            }
         } catch {
             Log.timeline.error("open room failed: \(error.localizedDescription, privacy: .public)")
             if roomOpening == mine { self.error = "\(error)" }

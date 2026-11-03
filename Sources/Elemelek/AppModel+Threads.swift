@@ -1,5 +1,6 @@
 import Foundation
 import MatrixRustSDK
+import ElemelekCore
 
 struct ThreadEntry: Identifiable, Hashable {
     let id: String
@@ -47,6 +48,11 @@ extension AppModel {
         guard let room = currentRoom else { return }
         sidePanel = .threads
         thread = nil
+        await startThreadList(room)
+    }
+
+    /// Follow the room's thread list: it feeds the side panel and the reply chips under thread roots on the timeline.
+    func startThreadList(_ room: Room, allPages: Bool = false) async {
         if threadService == nil {
             let svc = room.threadListService()
             threadService = svc
@@ -56,7 +62,15 @@ extension AppModel {
             rawThreads = svc.items()
             rebuildThreads()
         }
-        await Log.sync.attempt("thread paginate") { try await threadService?.paginate() }
+        guard let svc = threadService else { return }
+        // For the timeline's chips every root counts, not only the newest page; stop if the room changes.
+        var pages = 0
+        repeat {
+            // A failed page (no network) ends the run; opening the room or the panel again tries anew.
+            guard await Log.sync.attempt("thread paginate", { try await svc.paginate() }) != nil else { break }
+            pages += 1
+            if case .idle(let end) = svc.paginationState(), end { break }
+        } while allPages && pages < 50 && threadService === svc
     }
 
     func hideSidePanel() { thread = nil; sidePanel = .none }
@@ -93,5 +107,7 @@ extension AppModel {
                 replies: Int(it.numReplies), latest: latest,
                 date: Date(timeIntervalSince1970: Double((it.latestEvent ?? it.rootEvent).timestamp) / 1000))
         }.sorted { $0.date > $1.date }
+        timeline?.threadInfo = Dictionary(threads.map { ($0.id, ThreadInfo(replies: $0.replies, latest: $0.latest)) },
+                                          uniquingKeysWith: { a, _ in a })
     }
 }
