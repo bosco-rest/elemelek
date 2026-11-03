@@ -47,6 +47,11 @@ extension AppModel {
         guard let room = currentRoom else { return }
         sidePanel = .threads
         thread = nil
+        await startThreadList(room)
+    }
+
+    /// Follow the room's thread list: it feeds the side panel and the reply chips under thread roots on the timeline.
+    func startThreadList(_ room: Room) async {
         if threadService == nil {
             let svc = room.threadListService()
             threadService = svc
@@ -93,5 +98,7 @@ extension AppModel {
                 replies: Int(it.numReplies), latest: latest,
                 date: Date(timeIntervalSince1970: Double((it.latestEvent ?? it.rootEvent).timestamp) / 1000))
         }.sorted { $0.date > $1.date }
+        timeline?.threadInfo = Dictionary(threads.map { ($0.id, ThreadInfo(replies: $0.replies, latest: $0.latest)) },
+                                          uniquingKeysWith: { a, _ in a })
     }
 }

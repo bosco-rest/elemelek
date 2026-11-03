@@ -56,6 +56,9 @@ struct TimelineRow: Identifiable, Hashable {
     var imageName: String? { media?.name }
 }
 
+/// What the room's thread list knows about one thread root.
+struct ThreadInfo: Equatable { var replies: Int; var latest: String? }
+
 final class TLListener: TimelineListener, @unchecked Sendable {
     let cb: @Sendable ([TimelineDiff]) -> Void
     init(_ f: @escaping @Sendable ([TimelineDiff]) -> Void) { cb = f }
@@ -70,6 +73,8 @@ final class TimelineModel: Identifiable {
     let timeline: Timeline
     let threadRoot: String?
     let roomID: String
+    /// Thread counts by root event ID, from the thread list; used where the event itself carries no summary.
+    var threadInfo: [String: ThreadInfo] = [:] { didSet { if threadInfo != oldValue { rebuildRows() } } }
     private let client: Client
     private let ownID: String
 
@@ -216,7 +221,7 @@ final class TimelineModel: Identifiable {
             case .reset(let v): entries = v.map(entry)
             }
         }
-        rows = entries.compactMap(\.row)
+        rebuildRows()
         markRead()
         itemIDs = [:]; imageSources = [:]; mediaSources = [:]; thumbSources = [:]
         for en in entries where !en.id.isEmpty {
@@ -226,6 +231,17 @@ final class TimelineModel: Identifiable {
             thumbSources[en.id] = en.thumb
         }
         checkForMissingProfiles()
+    }
+
+    private func rebuildRows() {
+        rows = entries.compactMap { en in
+            guard var r = en.row else { return nil }
+            if let id = r.eventID, let info = threadInfo[id], info.replies > r.threadReplies {
+                r.threadReplies = info.replies
+                r.threadLatest = info.latest ?? r.threadLatest
+            }
+            return r
+        }
     }
 
     private func checkForMissingProfiles() {
