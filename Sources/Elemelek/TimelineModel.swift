@@ -56,9 +56,6 @@ struct TimelineRow: Identifiable, Hashable {
     var imageName: String? { media?.name }
 }
 
-/// What the room's thread list knows about one thread root.
-struct ThreadInfo: Equatable { var replies: Int; var latest: String? }
-
 final class TLListener: TimelineListener, @unchecked Sendable {
     let cb: @Sendable ([TimelineDiff]) -> Void
     init(_ f: @escaping @Sendable ([TimelineDiff]) -> Void) { cb = f }
@@ -236,9 +233,9 @@ final class TimelineModel: Identifiable {
     private func rebuildRows() {
         rows = entries.compactMap { en in
             guard var r = en.row else { return nil }
-            if let id = r.eventID, let info = threadInfo[id], info.replies > r.threadReplies {
-                r.threadReplies = info.replies
-                r.threadLatest = info.latest ?? r.threadLatest
+            if let id = r.eventID {
+                (r.threadReplies, r.threadLatest) = ThreadInfo.merge(replies: r.threadReplies, latest: r.threadLatest,
+                                                                     with: threadInfo[id])
             }
             return r
         }

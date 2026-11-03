@@ -1,5 +1,6 @@
 import Foundation
 import MatrixRustSDK
+import ElemelekCore
 
 struct ThreadEntry: Identifiable, Hashable {
     let id: String
@@ -51,7 +52,7 @@ extension AppModel {
     }
 
     /// Follow the room's thread list: it feeds the side panel and the reply chips under thread roots on the timeline.
-    func startThreadList(_ room: Room) async {
+    func startThreadList(_ room: Room, allPages: Bool = false) async {
         if threadService == nil {
             let svc = room.threadListService()
             threadService = svc
@@ -61,7 +62,14 @@ extension AppModel {
             rawThreads = svc.items()
             rebuildThreads()
         }
-        await Log.sync.attempt("thread paginate") { try await threadService?.paginate() }
+        guard let svc = threadService else { return }
+        // For the timeline's chips every root counts, not only the newest page; stop if the room changes.
+        var pages = 0
+        repeat {
+            await Log.sync.attempt("thread paginate") { try await svc.paginate() }
+            pages += 1
+            if case .idle(let end) = svc.paginationState(), end { break }
+        } while allPages && pages < 50 && threadService === svc
     }
 
     func hideSidePanel() { thread = nil; sidePanel = .none }
