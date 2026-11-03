@@ -219,6 +219,7 @@ private final class RedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked 
 
 /// A preview of the first of `urls` that has one: some sites (x.com) give nothing without running scripts.
 struct LinkPreviewCard: View {
+    @Environment(\.zoomFactor) var zoom
     let urls: [URL]
     @State private var url: URL?
     @State private var preview: LinkPreview?
@@ -258,13 +259,13 @@ struct LinkPreviewCard: View {
         HStack(spacing: 0) {
             Rectangle().fill(Theme.accent.opacity(0.7)).frame(width: 3)
             VStack(alignment: .leading, spacing: 4) {
-                Text(p.siteName ?? p.url.host ?? "").font(Theme.font(size: 11)).foregroundStyle(Theme.dim).lineLimit(1)
+                Text(p.siteName ?? p.url.host ?? "").font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).lineLimit(1)
                 if let t = p.title {
-                    Text(t).font(Theme.font(size: 13, weight: .semibold)).foregroundStyle(Theme.accent)
+                    Text(t).font(Theme.font(size: zoom * 13, weight: .semibold)).foregroundStyle(Theme.accent)
                         .lineLimit(2).multilineTextAlignment(.leading)
                 }
                 if let d = p.description {
-                    Text(d).font(Theme.font(size: 12)).foregroundStyle(Theme.text.opacity(0.85))
+                    Text(d).font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.text.opacity(0.85))
                         .lineLimit(3).multilineTextAlignment(.leading)
                 }
                 if let image, p.title != nil || p.description != nil {

@@ -14,14 +14,32 @@ struct MainView: View {
     @State private var showSidebar = true
     @State private var showVerify = false
     @State private var roomSheet: RoomSheet?
+    @AppStorage("sidebarWidth") private var sidebarWidth = 280.0
+    @State private var dragBase: CGFloat?
 
     var body: some View {
         ZStack {
             HStack(spacing: 0) {
                 Sidebar(query: $query, showVerify: $showVerify, roomSheet: $roomSheet, compact: !showSidebar,
                         expand: { withAnimation(.snappy) { showSidebar = true } })
-                    .frame(width: showSidebar ? 280 : 72)
-                Rectangle().fill(Theme.hairline).frame(width: 1).ignoresSafeArea()
+                    .frame(width: showSidebar ? sidebarWidth : 72)
+                ZStack(alignment: .center) {
+                    Rectangle().fill(Theme.hairline).frame(width: 1)
+                    if showSidebar {
+                        Color.clear.frame(width: 9)
+                            .contentShape(Rectangle())
+                            // In the divider's own space the numbers chase their own tail:
+                            // every width change moves the ruler it is measured with.
+                            .gesture(DragGesture(minimumDistance: 2, coordinateSpace: .global).onChanged { v in
+                                if dragBase == nil { dragBase = sidebarWidth }
+                                sidebarWidth = min(420, max(180, dragBase! + v.translation.width))
+                            }.onEnded { _ in dragBase = nil })
+                            .onHover { h in
+                                if h { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+                            }
+                    }
+                }
+                .ignoresSafeArea()
                 DetailView(showSidebar: $showSidebar)
             }
             .ignoresSafeArea(edges: .top)
@@ -50,6 +68,7 @@ struct MainView: View {
 // MARK: - Sidebar
 
 private struct Sidebar: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     @Binding var query: String
     @Binding var showVerify: Bool
@@ -123,7 +142,7 @@ private struct Sidebar: View {
     private var searchField: some View {
         HStack(spacing: 8) {
             Pic(name: "magnifier", size: 14).opacity(0.8)
-            TextField("Search messages", text: $query).textFieldStyle(.plain).font(Theme.font(size: 13))
+            TextField("Search messages", text: $query).textFieldStyle(.plain).font(Theme.font(size: zoom * 13))
                 .onChange(of: query) { _, q in Task { await model.search(q) } }
             if !query.isEmpty {
                 Button { query = "" } label: { Pic(name: "cross_mark", size: 12) }.buttonStyle(.plain)
@@ -158,7 +177,7 @@ private struct Sidebar: View {
                     if !dms.isEmpty && !rest.isEmpty { section("Rooms") }
                     ForEach(rest) { r in roomRow(r) }
                 } else if model.searchHits.isEmpty {
-                    Text("No results").font(Theme.font(size: 12)).foregroundStyle(Theme.dim).padding(.top, 20)
+                    Text("No results").font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.dim).padding(.top, 20)
                 } else {
                     ForEach(model.searchHits) { h in
                         HitRow(hit: h) { query = ""; Task { await model.select(h.roomID) } }
@@ -176,7 +195,7 @@ private struct Sidebar: View {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small)
                     Text("Indexing messages… \(model.indexDone)/\(model.indexTotal)")
-                        .font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                        .font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
                     Spacer()
                 }.padding(.horizontal, 14).padding(.vertical, 6)
             }
@@ -190,6 +209,7 @@ private struct Sidebar: View {
 }
 
 private struct InviteRow: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     let room: RoomEntry
     var body: some View {
@@ -197,9 +217,9 @@ private struct InviteRow: View {
             HStack(spacing: 10) {
                 Avatar(name: room.name, url: room.avatarURL, size: 30)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(room.name).font(Theme.font(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text(room.name).font(Theme.font(size: zoom * 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                     if let who = room.inviter {
-                        Text("Invited by \(who)").font(Theme.font(size: 11)).foregroundStyle(Theme.dim).lineLimit(1)
+                        Text("Invited by \(who)").font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).lineLimit(1)
                     }
                 }
                 Spacer(minLength: 0)
@@ -215,15 +235,17 @@ private struct InviteRow: View {
 }
 
 private struct SectionLabel: View {
+    @Environment(\.zoomFactor) var zoom
     let text: String
     init(_ text: String.LocalizationValue) { self.text = String(localized: text) }
     var body: some View {
-        Text(verbatim: text).font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.dim)
+        Text(verbatim: text).font(Theme.font(size: zoom * 11, weight: .semibold)).foregroundStyle(Theme.dim)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 10).padding(.top, 10).padding(.bottom, 2)
     }
 }
 
 private struct RoomRow: View {
+    @Environment(\.zoomFactor) var zoom
     let name: String
     var avatarURL: String?
     var unread = false
@@ -245,10 +267,10 @@ private struct RoomRow: View {
                 .overlay(alignment: .topTrailing) {
                     Group {
                         if mentioned {
-                            Text("@").font(Theme.font(size: 10, weight: .bold)).foregroundStyle(.white)
+                            Text("@").font(Theme.font(size: zoom * 10, weight: .bold)).foregroundStyle(.white)
                                 .frame(width: 16, height: 16).background(Circle().fill(Theme.red))
                         } else if count > 0 {
-                            Text(count > 99 ? "99+" : "\(count)").font(Theme.font(size: 10, weight: .semibold)).foregroundStyle(.white)
+                            Text(count > 99 ? "99+" : "\(count)").font(Theme.font(size: zoom * 10, weight: .semibold)).foregroundStyle(.white)
                                 .padding(.horizontal, 4).frame(minWidth: 16, minHeight: 16).background(Capsule().fill(Theme.accent))
                         } else if unread {
                             Circle().fill(Theme.dim).frame(width: 9, height: 9)
@@ -270,7 +292,7 @@ private struct RoomRow: View {
             } else { showName = false }
         }
         .popover(isPresented: $showName, arrowEdge: .trailing) {
-            Text(name).font(Theme.font(size: 13, weight: unread ? .semibold : .regular))
+            Text(name).font(Theme.font(size: zoom * 13, weight: unread ? .semibold : .regular))
                 .padding(.horizontal, 12).padding(.vertical, 8)
         }
         .accessibilityLabel(name)
@@ -280,16 +302,16 @@ private struct RoomRow: View {
         Button(action: action) {
             HStack(spacing: 10) {
                 Avatar(name: name, url: avatarURL, size: 30)
-                Text(name).font(Theme.font(size: 13, weight: unread ? .semibold : .regular))
+                Text(name).font(Theme.font(size: zoom * 13, weight: unread ? .semibold : .regular))
                     .foregroundStyle(unread || selected ? Theme.text : Theme.text.opacity(0.75)).lineLimit(1)
                 Spacer(minLength: 0)
                 if mentioned {
-                    Text("@").font(Theme.font(size: 11, weight: .bold)).foregroundStyle(.white)
+                    Text("@").font(Theme.font(size: zoom * 11, weight: .bold)).foregroundStyle(.white)
                         .frame(minWidth: 18, minHeight: 18).background(Circle().fill(Theme.red))
                         .help("You were mentioned")
                 }
                 if count > 0 {
-                    Text(count > 999 ? "999+" : "\(count)").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(.white)
+                    Text(count > 999 ? "999+" : "\(count)").font(Theme.font(size: zoom * 11, weight: .semibold)).foregroundStyle(.white)
                         .padding(.horizontal, 6).padding(.vertical, 1)
                         .background(Capsule().fill(Theme.accent))
                 } else if unread && !mentioned {
@@ -306,14 +328,15 @@ private struct RoomRow: View {
 }
 
 private struct HitRow: View {
+    @Environment(\.zoomFactor) var zoom
     let hit: SearchHit
     let action: () -> Void
     @State private var hovering = false
     var body: some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("\(hit.roomName) · \(hit.sender)").font(Theme.font(size: 11)).foregroundStyle(Theme.dim).lineLimit(1)
-                Text(hit.text).font(Theme.font(size: 13)).foregroundStyle(Theme.text).lineLimit(3)
+                Text("\(hit.roomName) · \(hit.sender)").font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).lineLimit(1)
+                Text(hit.text).font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.text).lineLimit(3)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(8)

@@ -3,6 +3,7 @@ import SwiftUI
 // MARK: - Verification
 
 struct VerifySheet: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     @Binding var isPresented: Bool
     @State private var useKey = false
@@ -12,7 +13,7 @@ struct VerifySheet: View {
         VStack(alignment: .leading, spacing: 16) {
             HStack(spacing: 10) {
                 Pic(name: model.verification == .done ? "check_mark_button" : "shield", size: 30)
-                Text("Verify this session").font(Theme.font(size: 16, weight: .semibold)).foregroundStyle(Theme.text)
+                Text("Verify this session").font(Theme.font(size: zoom * 16, weight: .semibold)).foregroundStyle(Theme.text)
             }
             content
         }
@@ -31,12 +32,12 @@ struct VerifySheet: View {
             progress("Starting verification…")
         case .emojis(let emojis):
             Text("Compare these emoji with the ones on your other device.")
-                .font(Theme.font(size: 13)).foregroundStyle(Theme.dim)
+                .font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.dim)
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4), spacing: 8) {
                 ForEach(emojis) { e in
                     VStack(spacing: 4) {
                         SASEmoji(symbol: e.symbol, size: 36)
-                        Text(e.name).font(Theme.font(size: 10)).foregroundStyle(Theme.dim).lineLimit(1)
+                        Text(e.name).font(Theme.font(size: zoom * 10)).foregroundStyle(Theme.dim).lineLimit(1)
                     }
                     .frame(maxWidth: .infinity).padding(.vertical, 8)
                     .plate(Theme.panel, radius: 10)
@@ -51,11 +52,11 @@ struct VerifySheet: View {
         case .confirming:
             progress("Waiting for the other device…")
         case .done:
-            Text("This session is verified.").font(Theme.font(size: 13)).foregroundStyle(Theme.dim)
+            Text("This session is verified.").font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.dim)
             HStack { Spacer(); Button("Done") { isPresented = false }.buttonStyle(KitButton(prominent: true)).keyboardShortcut(.defaultAction) }
         case .failed:
-            Text("Verification failed or was cancelled.").font(Theme.font(size: 13)).foregroundStyle(Theme.red)
-            if let e = model.error { Text(e).font(Theme.font(size: 11)).foregroundStyle(Theme.dim).lineLimit(3) }
+            Text("Verification failed or was cancelled.").font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.red)
+            if let e = model.error { Text(e).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).lineLimit(3) }
             HStack {
                 Spacer()
                 Button("Cancel") { isPresented = false }.buttonStyle(KitButton())
@@ -66,7 +67,7 @@ struct VerifySheet: View {
 
     private var chooser: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Confirm it's you to read your encrypted messages.").font(Theme.font(size: 13)).foregroundStyle(Theme.dim)
+            Text("Confirm it's you to read your encrypted messages.").font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.dim)
             Button { Task { await model.startVerification() } } label: {
                 HStack(spacing: 8) {
                     Pic(name: "mobile_phone", size: 18)
@@ -85,8 +86,8 @@ struct VerifySheet: View {
 
     private var keyForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SecureField("Paste your recovery key", text: $key).kitField()
-            if let m = model.recoveryMessage { Text(m).font(Theme.font(size: 12)).foregroundStyle(Theme.red) }
+            SecureField("Paste your recovery key", text: $key).kitField(zoom: zoom)
+            if let m = model.recoveryMessage { Text(m).font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.red) }
             HStack {
                 Button("Back") { useKey = false }.buttonStyle(KitButton())
                 Spacer()
@@ -100,7 +101,7 @@ struct VerifySheet: View {
     private func progress(_ text: LocalizedStringKey) -> some View {
         HStack(spacing: 10) {
             ProgressView().controlSize(.small)
-            Text(text).font(Theme.font(size: 13)).foregroundStyle(Theme.dim).fixedSize(horizontal: false, vertical: true)
+            Text(text).font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.dim).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
