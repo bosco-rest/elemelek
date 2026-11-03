@@ -147,13 +147,17 @@ public enum MarkdownBlocks {
         return n
     }
 
-    /// A list item's marker (`- `, `* `, `+ `, `1. `, `1) `, `- [ ] `) and its words; nil for any other line.
+    /// A list item's marker (`- `, `* `, `+ `, `• `, `1. `, `1) `, `- [ ] `) and its words; nil for any other line.
     static func listMarker(_ line: String) -> (mark: Item.Mark, text: String)? {
         if let box = checkbox(line) { return (.check(box.checked), box.text) }
         if line.hasPrefix("- ") || line.hasPrefix("* ") || line.hasPrefix("+ ") {
             return (.bullet, String(line.dropFirst(2)))
         }
-        if line == "-" || line == "*" { return (.bullet, "") }
+        // Pasted rich text (mail, newsletters) bullets with a literal • instead of markdown.
+        if line.hasPrefix("• ") {
+            return (.bullet, String(line.dropFirst(2)))
+        }
+        if line == "-" || line == "*" || line == "•" { return (.bullet, "") }
         let digits = line.prefix(while: \.isNumber)
         guard !digits.isEmpty, digits.count <= 9, let n = Int(digits) else { return nil }
         let rest = line.dropFirst(digits.count)

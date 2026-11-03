@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct LoginView: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     @State private var server = "matrix.org"
     @State private var user = ""
@@ -38,7 +39,7 @@ struct LoginView: View {
                     card.padding(.top, 20)
                     features.padding(.top, 20)
                     Text("Your password goes only to your own server. Elemelek sends nothing to third parties.")
-                        .font(Theme.font(size: 11)).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
+                        .font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
                         .padding(.top, 22)
                 }
                 .frame(maxWidth: 400)
@@ -57,9 +58,9 @@ struct LoginView: View {
             Text("Elemelek")
                 .font(.system(size: 38, weight: .bold, design: .rounded)).foregroundStyle(Theme.text)
             Text(greeting)
-                .font(Theme.font(size: 17, weight: .medium)).foregroundStyle(Theme.dim)
+                .font(Theme.font(size: zoom * 17, weight: .medium)).foregroundStyle(Theme.dim)
             Text("A native macOS messenger built on the Matrix protocol. Encrypted chats, threads and message search — all working locally on your Mac.")
-                .font(Theme.font(size: 13)).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
+                .font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
         }
     }
@@ -67,20 +68,20 @@ struct LoginView: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 14) {
             field("Homeserver", hint: "e.g. matrix.org or the address of your own server") {
-                TextField("matrix.org", text: $server).kitField().focused($focus, equals: .server)
+                TextField("matrix.org", text: $server).kitField(zoom: zoom).focused($focus, equals: .server)
                     .onSubmit { focus = .user }
             }
             field("Username", hint: nil) {
-                TextField("username or @username:server", text: $user).kitField().focused($focus, equals: .user)
+                TextField("username or @username:server", text: $user).kitField(zoom: zoom).focused($focus, equals: .user)
                     .onSubmit { focus = .password }
             }
             field("Password", hint: nil) {
-                SecureField("••••••••", text: $password).kitField().focused($focus, equals: .password)
+                SecureField("••••••••", text: $password).kitField(zoom: zoom).focused($focus, equals: .password)
                     .onSubmit(submit)
             }
             if let e = model.error {
                 Label(e, systemImage: "exclamationmark.triangle.fill")
-                    .font(Theme.font(size: 12)).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
+                    .font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
             }
             Button(action: submit) {
                 HStack(spacing: 8) {
@@ -98,9 +99,9 @@ struct LoginView: View {
 
     private func field<C: View>(_ title: LocalizedStringKey, hint: LocalizedStringKey?, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.dim)
+            Text(title).font(Theme.font(size: zoom * 12, weight: .medium)).foregroundStyle(Theme.dim)
             content()
-            if let hint { Text(hint).font(Theme.font(size: 11)).foregroundStyle(Theme.dim) }
+            if let hint { Text(hint).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim) }
         }
     }
 
@@ -117,8 +118,8 @@ struct LoginView: View {
         HStack(alignment: .top, spacing: 12) {
             Pic(name: icon, size: 26).frame(width: 30)
             VStack(alignment: .leading, spacing: 1) {
-                Text(title).font(Theme.font(size: 13, weight: .semibold)).foregroundStyle(Theme.text)
-                Text(text).font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                Text(title).font(Theme.font(size: zoom * 13, weight: .semibold)).foregroundStyle(Theme.text)
+                Text(text).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
             }
         }
     }

@@ -3,6 +3,7 @@ import AppKit
 import ElemelekCore
 
 struct DetailView: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     @Binding var showSidebar: Bool
 
@@ -38,7 +39,7 @@ struct DetailView: View {
             IconButton(pic: "sidebar.left", help: "Toggle sidebar") { withAnimation(.snappy) { showSidebar.toggle() } }
             if model.selectedRoomID != nil {
                 Avatar(name: roomName, url: model.rooms.first { $0.id == model.selectedRoomID }?.avatarURL, size: 26)
-                Text(roomName).font(Theme.font(size: 15, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                Text(roomName).font(Theme.font(size: zoom * 15, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
             }
             Spacer()
             if let id = model.selectedRoomID {
@@ -62,6 +63,7 @@ struct DetailView: View {
 // MARK: - Timeline
 
 struct TimelineList: View {
+    @Environment(\.zoomFactor) var zoom
     @Bindable var tl: TimelineModel
     let inThread: Bool
     @State private var position = ScrollPosition(idType: String.self)
@@ -76,7 +78,7 @@ struct TimelineList: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 top
                 ForEach(Array(tl.rows.enumerated()), id: \.element.id) { i, r in
-                    let first = i == 0 || tl.rows[i - 1].sender != r.sender
+                    let first = MessageGrouping.showsHeader(current: r, previous: i > 0 ? tl.rows[i - 1] : nil)
                     MessageRow(tl: tl, row: r, showHeader: first, inThread: inThread)
                         .padding(.top, first ? 14 : 2)
                 }
@@ -111,7 +113,7 @@ struct TimelineList: View {
 
     @ViewBuilder private var top: some View {
         if tl.hitStart {
-            Text("Start of the conversation").font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+            Text("Start of the conversation").font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
                 .frame(maxWidth: .infinity).padding(.vertical, 14)
         } else if tl.pageError != nil {
             HStack(spacing: 8) {
@@ -126,6 +128,7 @@ struct TimelineList: View {
 }
 
 struct MessageRow: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     let tl: TimelineModel
     let row: TimelineRow
@@ -155,10 +158,10 @@ struct MessageRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 if showHeader {
                     HStack(spacing: 8) {
-                        Text(row.sender).font(Theme.font(size: 13, weight: .semibold))
+                        Text(row.sender).font(Theme.font(size: zoom * 13, weight: .semibold))
                             .foregroundStyle(row.isOwn ? Theme.accent : Theme.tint(for: row.sender))
                         Text(row.date.map { Self.time.string(from: $0) } ?? "")
-                            .font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                            .font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
                     }
                 }
                 if let r = row.reply { ReplyQuote(reply: r) }
@@ -168,7 +171,7 @@ struct MessageRow: View {
                 } else if !row.text.isEmpty {
                     MarkdownText(text: row.text)
                     if row.isEdited {
-                        Text("(edited)").font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                        Text("(edited)").font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
                     }
                 }
                 if linkPreviews { let links = LinkFinder.all(in: row.text); if !links.isEmpty { LinkPreviewCard(urls: links).padding(.top, 2) } }
@@ -187,6 +190,7 @@ struct MessageRow: View {
                         .padding(.top, 2)
                 }
             }
+            .frame(maxWidth: Theme.readingWidth, alignment: .leading)
             Spacer(minLength: 0)
         }
         .padding(.vertical, 2).padding(.horizontal, 6)
@@ -266,6 +270,7 @@ private struct EmojiPickerLoader: View {
 }
 
 private struct ReactionPill: View {
+    @Environment(\.zoomFactor) var zoom
     let chip: ReactionChip
     let action: () -> Void
     @State private var hovering = false
@@ -273,7 +278,7 @@ private struct ReactionPill: View {
         Button(action: action) {
             HStack(spacing: 5) {
                 Text(chip.key).font(.system(size: 13))
-                Text("\(chip.count)").font(Theme.font(size: 12, weight: chip.mine ? .semibold : .regular))
+                Text("\(chip.count)").font(Theme.font(size: zoom * 12, weight: chip.mine ? .semibold : .regular))
                     .foregroundStyle(chip.mine ? Theme.accent : Theme.dim)
             }
             .padding(.horizontal, 9).padding(.vertical, 3)
@@ -287,15 +292,16 @@ private struct ReactionPill: View {
 }
 
 private struct ReplyQuote: View {
+    @Environment(\.zoomFactor) var zoom
     let reply: ReplyPreview
     var body: some View {
         HStack(spacing: 8) {
             Pic(name: "right_arrow_curving_left", size: 13).opacity(0.7)
             Rectangle().fill(Theme.accent.opacity(0.6)).frame(width: 2, height: 16)
             if !reply.sender.isEmpty {
-                Text(reply.sender).font(Theme.font(size: 12, weight: .semibold)).foregroundStyle(Theme.tint(for: reply.sender))
+                Text(reply.sender).font(Theme.font(size: zoom * 12, weight: .semibold)).foregroundStyle(Theme.tint(for: reply.sender))
             }
-            Text(reply.text).font(Theme.font(size: 12)).foregroundStyle(Theme.dim).lineLimit(1)
+            Text(reply.text).font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.dim).lineLimit(1)
         }
     }
 }
@@ -316,6 +322,7 @@ private struct MediaView: View {
 }
 
 private struct VideoCard: View {
+    @Environment(\.zoomFactor) var zoom
     let tl: TimelineModel
     let row: TimelineRow
     let media: MediaInfo
@@ -336,7 +343,7 @@ private struct VideoCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
             .overlay(alignment: .bottomLeading) {
                 Text(media.name + (media.duration.map { " · " + Self.dur($0) } ?? ""))
-                    .font(Theme.font(size: 11)).foregroundStyle(.white).lineLimit(1)
+                    .font(Theme.font(size: zoom * 11)).foregroundStyle(.white).lineLimit(1)
                     .padding(.horizontal, 8).padding(.vertical, 3)
                     .background(.black.opacity(0.5), in: Capsule()).padding(8)
             }
@@ -352,6 +359,7 @@ private struct VideoCard: View {
 }
 
 private struct FileCard: View {
+    @Environment(\.zoomFactor) var zoom
     let tl: TimelineModel
     let row: TimelineRow
     let media: MediaInfo
@@ -363,8 +371,8 @@ private struct FileCard: View {
                 Pic(name: media.kind == .audio ? "megaphone" : "paperclip", size: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(media.isVoice ? String(localized: "Voice message") : media.name)
-                        .font(Theme.font(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
-                    Text(detail).font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                        .font(Theme.font(size: zoom * 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
+                    Text(detail).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
                 }
                 Spacer(minLength: 0)
                 if busy { ProgressView().controlSize(.small) }
@@ -385,6 +393,7 @@ private struct FileCard: View {
 }
 
 private struct ThreadChip: View {
+    @Environment(\.zoomFactor) var zoom
     let count: Int
     let latest: String?
     let action: () -> Void
@@ -393,9 +402,9 @@ private struct ThreadChip: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Pic(name: "thread", size: 16)
-                Text("Replies: \(count)").font(Theme.font(size: 12, weight: .semibold)).foregroundStyle(Theme.accent)
+                Text("Replies: \(count)").font(Theme.font(size: zoom * 12, weight: .semibold)).foregroundStyle(Theme.accent)
                 if let latest {
-                    Text(latest).font(Theme.font(size: 12)).foregroundStyle(Theme.dim).lineLimit(1)
+                    Text(latest).font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.dim).lineLimit(1)
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 5)
@@ -454,6 +463,7 @@ struct ThumbView: View {
 // MARK: - Composer
 
 private struct TypingLine: View {
+    @Environment(\.zoomFactor) var zoom
     let names: [String]
     var text: String {
         switch names.count {
@@ -464,13 +474,14 @@ private struct TypingLine: View {
         }
     }
     var body: some View {
-        Text(text).font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+        Text(text).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
             .frame(maxWidth: .infinity, minHeight: 16, alignment: .leading).padding(.horizontal, 22)
             .background(Theme.background)
     }
 }
 
 struct Composer: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     @Bindable var tl: TimelineModel
     let inThread: Bool
@@ -489,8 +500,8 @@ struct Composer: View {
                     RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 3, height: 28)
                     VStack(alignment: .leading, spacing: 1) {
                         Text((tl.editing != nil ? String(localized: "Editing: ") : String(localized: "Replying to: ")) + r.sender)
-                            .font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.accent)
-                        Text(r.text.isEmpty ? (r.media?.name ?? "") : r.text).font(Theme.font(size: 12)).foregroundStyle(Theme.dim).lineLimit(1)
+                            .font(Theme.font(size: zoom * 11, weight: .semibold)).foregroundStyle(Theme.accent)
+                        Text(r.text.isEmpty ? (r.media?.name ?? "") : r.text).font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.dim).lineLimit(1)
                     }
                     Spacer()
                     IconButton(pic: "cross_mark", help: "Cancel", size: 24) {
@@ -502,10 +513,27 @@ struct Composer: View {
             HStack(alignment: .bottom, spacing: 6) {
                 IconButton(pic: "paperclip", help: "Attach files", size: 32) { pick() }
                 TextField(LocalizedStringKey(placeholder), text: $draft, axis: .vertical)
-                    .textFieldStyle(.plain).font(Theme.font(size: 14)).lineLimit(1...8)
+                    .textFieldStyle(.plain).font(Theme.font(size: zoom * 14)).lineLimit(1...8)
                     .padding(.vertical, 6)
                     .focused($focused)
                     .onSubmit(send)
+                    .onKeyPress(.upArrow) {
+                        guard let last = ComposerEdit.arrowUpTarget(
+                            rows: tl.rows, draft: draft,
+                            isEditing: tl.editing != nil, isReplying: tl.replyingTo != nil,
+                            hasAttachments: !tl.attachments.isEmpty)
+                        else { return .ignored }
+                        tl.editing = last
+                        tl.replyingTo = nil
+                        return .handled
+                    }
+                    .onKeyPress(.escape) {
+                        guard ComposerEdit.shouldCancelComposeOnEscape(
+                            isEditing: tl.editing != nil, isReplying: tl.replyingTo != nil)
+                        else { return .ignored }
+                        tl.replyingTo = nil; tl.editing = nil; draft = ""
+                        return .handled
+                    }
                 if tl.sending { ProgressView().controlSize(.small).frame(width: 32, height: 32) }
                 Button(action: send) {
                     Pic(name: "outbox_tray", size: 18)
@@ -550,6 +578,7 @@ struct Composer: View {
 
 /// What is about to be sent, as chips above the field; the cross takes one out.
 private struct AttachmentStrip: View {
+    @Environment(\.zoomFactor) var zoom
     @Bindable var tl: TimelineModel
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -564,8 +593,8 @@ private struct AttachmentStrip: View {
                             Pic(name: a.kind == .audio ? "megaphone" : "paperclip", size: 26).frame(width: 40, height: 40)
                         }
                         VStack(alignment: .leading, spacing: 1) {
-                            Text(a.name).font(Theme.font(size: 12, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1).frame(maxWidth: 160, alignment: .leading)
-                            Text(Attachment.formattedSize(a.size)).font(Theme.font(size: 11)).foregroundStyle(Theme.dim)
+                            Text(a.name).font(Theme.font(size: zoom * 12, weight: .medium)).foregroundStyle(Theme.text).lineLimit(1).frame(maxWidth: 160, alignment: .leading)
+                            Text(Attachment.formattedSize(a.size)).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim)
                         }
                         IconButton(pic: "cross_mark", help: "Remove", size: 22) { tl.removeAttachment(a) }
                     }
@@ -576,7 +605,7 @@ private struct AttachmentStrip: View {
         }
         if tl.attachments.contains(where: { $0.kind == .image }) {
             Toggle("Send in original quality (HD)", isOn: $tl.sendOriginal)
-                .toggleStyle(.checkbox).font(Theme.font(size: 12)).foregroundStyle(Theme.dim)
+                .toggleStyle(.checkbox).font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.dim)
         }
         }
     }
@@ -584,10 +613,11 @@ private struct AttachmentStrip: View {
 
 /// A message that cannot be read yet: quiet, in the secondary colour, with the reason.
 struct LockedLine: View {
+    @Environment(\.zoomFactor) var zoom
     let text: String
     var body: some View {
         Label { Text(text).italic() } icon: { Image(systemName: "lock.fill").imageScale(.small) }
-            .font(Theme.font(size: 12)).foregroundStyle(Theme.dim)
+            .font(Theme.font(size: zoom * 12)).foregroundStyle(Theme.dim)
             .padding(.horizontal, 8).padding(.vertical, 3)
             .background(Capsule().fill(Theme.wash(0.05)))
             .help("Elemelek asks your other sessions and the key backup for the key; the message updates by itself when it arrives.")

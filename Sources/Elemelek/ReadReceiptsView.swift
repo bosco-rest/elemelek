@@ -3,6 +3,7 @@ import ElemelekCore
 
 /// Floating read receipts indicator displayed below a message in the timeline.
 struct ReadReceiptsView: View {
+    @Environment(\.zoomFactor) var zoom
     let receipts: [ReadReceipt]
     var style: ReadReceiptStyle = .avatarsAndNames
     @State private var hovering = false
@@ -19,7 +20,7 @@ struct ReadReceiptsView: View {
                 let labelText = ReadReceiptFormatter.label(for: receipts, style: style)
                 if !labelText.isEmpty {
                     Text(labelText)
-                        .font(Theme.font(size: 11))
+                        .font(Theme.font(size: zoom * 11))
                         .foregroundStyle(Theme.dim)
                         .lineLimit(1)
                 }
@@ -56,7 +57,7 @@ struct ReadReceiptsView: View {
             }
             if remaining > 0 && style == .avatarsOnly {
                 Text("+\(remaining)")
-                    .font(Theme.font(size: 9, weight: .semibold))
+                    .font(Theme.font(size: zoom * 9, weight: .semibold))
                     .foregroundStyle(Theme.dim)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
@@ -69,6 +70,7 @@ struct ReadReceiptsView: View {
 
 /// Detailed popover listing all readers with their avatars, names, Matrix IDs, and read timestamps.
 struct ReadReceiptsPopover: View {
+    @Environment(\.zoomFactor) var zoom
     let receipts: [ReadReceipt]
 
     private static let timeFormatter: DateFormatter = {
@@ -82,7 +84,7 @@ struct ReadReceiptsPopover: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("Read by \(receipts.count)")
-                    .font(Theme.font(size: 13, weight: .semibold))
+                    .font(Theme.font(size: zoom * 13, weight: .semibold))
                     .foregroundStyle(Theme.text)
                 Spacer()
             }
@@ -95,18 +97,18 @@ struct ReadReceiptsPopover: View {
                             Avatar(name: r.displayName, url: r.avatarURL, size: 26)
                             VStack(alignment: .leading, spacing: 1) {
                                 Text(r.displayName)
-                                    .font(Theme.font(size: 12, weight: .medium))
+                                    .font(Theme.font(size: zoom * 12, weight: .medium))
                                     .foregroundStyle(Theme.text)
                                     .lineLimit(1)
                                 Text(r.userID)
-                                    .font(Theme.font(size: 10))
+                                    .font(Theme.font(size: zoom * 10))
                                     .foregroundStyle(Theme.dim)
                                     .lineLimit(1)
                             }
                             Spacer(minLength: 12)
                             if let date = r.date {
                                 Text(Self.timeFormatter.string(from: date))
-                                    .font(Theme.font(size: 10))
+                                    .font(Theme.font(size: zoom * 10))
                                     .foregroundStyle(Theme.dim)
                             }
                         }

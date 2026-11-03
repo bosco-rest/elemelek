@@ -5,14 +5,14 @@ import ElemelekCore
 /// `MarkdownBlocks.parse` (headings, lists with sub-lists, quotes, fenced code, tables); inline styles and links
 /// go through `AttributedString(markdown:)`.
 enum MarkdownMetrics {
-    static let leading: CGFloat = 4
-    static let blockSpacing: CGFloat = 8
+    static let leading: CGFloat = 5
+    static let blockSpacing: CGFloat = 10
     static let headingSpace: CGFloat = 12
-    static let itemSpacing: CGFloat = 4
+    static let itemSpacing: CGFloat = 7
 
     static func markerWidth(_ m: MarkdownBlocks.Item.Mark) -> CGFloat {
         switch m {
-        case .bullet: 14
+        case .bullet: 18
         case .number: 26
         case .check: 20
         }
@@ -31,40 +31,68 @@ enum MarkdownMetrics {
 }
 
 struct MarkdownText: View {
+    @Environment(\.zoomFactor) var zoom
     let text: String
     var size: CGFloat = 14
 
-    private var body_: Font { Theme.font(size: size) }
+    /// Follows the system's text size; 1.0 at the default setting, a no-op where unsupported.
+    @ScaledMetric(relativeTo: .body) private var unit: CGFloat = 1
+    /// Every prose measure below derives from this, so larger text stays proportional.
+    private var scaled: CGFloat { size * unit }
+
+    private var body_: Font { Theme.font(size: zoom * scaled) }
 
     var body: some View {
         let blocks = MarkdownCache.blocks(text)
+        // One pool for the whole message: a digest's convention ("source — headline")
+        // spans its sections, and sections alone are too small to judge.
+        let leads = leadMap(blocks: blocks)
         VStack(alignment: .leading, spacing: MarkdownMetrics.blockSpacing) {
-            ForEach(Array(blocks.enumerated()), id: \.offset) { i, b in block(b, first: i == 0) }
+            ForEach(Array(blocks.enumerated()), id: \.offset) { i, b in block(b, first: i == 0, leads: leads) }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .fixedSize(horizontal: false, vertical: true)
         .textSelection(.enabled)
     }
 
-    @ViewBuilder private func block(_ b: MarkdownBlocks.Block, first: Bool) -> some View {
+    /// Lead lengths by the source line of their item; only qualifying items are present.
+    private func leadMap(blocks: [MarkdownBlocks.Block]) -> [Int: Int] {
+        var lines: [Int] = []
+        var plains: [String] = []
+        for b in blocks {
+            guard case .list(let items) = b else { continue }
+            for it in items {
+                lines.append(it.line)
+                plains.append(String(MarkdownCache.inline(it.text, size: scaled).characters))
+            }
+        }
+        let lens = ListLeads.detect(in: plains)
+        return Dictionary(uniqueKeysWithValues: zip(lines, lens).compactMap { line, len in len.map { (line, $0) } })
+    }
+
+    @ViewBuilder private func block(_ b: MarkdownBlocks.Block, first: Bool, leads: [Int: Int] = [:]) -> some View {
         switch b {
         case .heading(let level, let t):
             inline(t)
-                .font(Theme.font(size: level == 1 ? size + 4 : level == 2 ? size + 2 : size, weight: level <= 2 ? .bold : .semibold))
+                .font(Theme.font(size: zoom * (level == 1 ? scaled + 4 : level == 2 ? scaled + 2 : scaled), weight: level <= 2 ? .bold : .semibold))
                 .foregroundStyle(Theme.text)
                 .padding(.top, first ? 0 : level <= 2 ? MarkdownMetrics.headingSpace : 4)
         case .paragraph(let t):
-            inline(t).font(body_).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
+            if SectionHeader.isHeader(String(MarkdownCache.inline(t, size: scaled).characters)) {
+                inline(t).font(Theme.font(size: zoom * scaled, weight: .semibold)).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
+            } else {
+                inline(t).font(body_).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
+            }
         case .list(let items):
             let offsets = MarkdownMetrics.listOffsets(items)
             VStack(alignment: .leading, spacing: MarkdownMetrics.itemSpacing) {
                 ForEach(Array(items.enumerated()), id: \.element.line) { i, it in
-                    listItem(it).padding(.leading, offsets[i])
+                    listItem(it, lead: leads[it.line] ?? nil).padding(.leading, offsets[i])
                 }
             }
         case .code(let c):
             Text(CodeHighlight.text(c, Syntax.guess(c)))
-                .font(Theme.font(size: size - 2.5, design: .monospaced))
+                .font(Theme.font(size: zoom * (scaled - 2.5), design: .monospaced))
                 .foregroundStyle(Theme.text).lineSpacing(2)
                 .padding(10)
                 .frame(maxWidth: .infinity, alignment: .leading).sunken()
@@ -81,33 +109,58 @@ struct MarkdownText: View {
         }
     }
 
-    @ViewBuilder private func listItem(_ it: MarkdownBlocks.Item) -> some View {
+    @ViewBuilder private func listItem(_ it: MarkdownBlocks.Item, lead: Int?) -> some View {
         switch it.mark {
         case .bullet:
             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text("•").foregroundStyle(Theme.dim).frame(width: 6, alignment: .leading)
-                inline(it.text).font(body_).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
+                Text("•").foregroundStyle(Theme.dim).frame(width: 10, alignment: .leading)
+                leadInline(it.text, lead: lead).font(body_).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
             }
         case .number(let n):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("\(n).").font(body_).monospacedDigit().foregroundStyle(Theme.dim)
                     .frame(minWidth: 18, alignment: .trailing)
-                inline(it.text).font(body_).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
+                leadInline(it.text, lead: lead).font(body_).foregroundStyle(Theme.text).lineSpacing(MarkdownMetrics.leading)
             }
         case .check(let checked):
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(checked ? "☑︎" : "☐").foregroundStyle(checked ? Theme.green : Theme.dim)
-                inline(it.text.isEmpty ? "…" : it.text).font(body_)
+                leadInline(it.text.isEmpty ? "…" : it.text, lead: lead).font(body_)
                     .foregroundStyle(checked ? Theme.dim : Theme.text)
                     .strikethrough(checked, color: Theme.dim)
             }
         }
     }
 
-    private func inline(_ s: String) -> Text { Text(MarkdownCache.inline(s, size: size)) }
+    private func inline(_ s: String) -> Text { Text(MarkdownCache.inline(s, size: scaled)) }
+
+    /// The item's text with its lead in semibold — calm at this density, where bold
+    /// would shout. Links inside keep their colour and gain the weight; code keeps
+    /// its monospace face.
+    private func leadInline(_ s: String, lead: Int?) -> Text {
+        var a = MarkdownCache.inline(s, size: scaled)
+        if let n = lead, n > 0 {
+            let plain = String(a.characters)
+            if plain.count >= n, let end = plain.index(plain.startIndex, offsetBy: n, limitedBy: plain.endIndex) {
+                let lo = a.startIndex
+                let hi = a.characters.index(lo, offsetBy: plain.distance(from: plain.startIndex, to: end))
+                let targets = a.runs.compactMap { run -> (Range<AttributedString.Index>, Bool)? in
+                    guard run.range.lowerBound >= lo, run.range.upperBound <= hi else { return nil }
+                    return (run.range, run.inlinePresentationIntent?.contains(.code) == true)
+                }
+                for (range, coded) in targets {
+                    a[range].font = coded
+                        ? Theme.font(size: zoom * (scaled - 1.5), weight: .semibold, design: .monospaced)
+                        : Theme.font(size: zoom * scaled, weight: .semibold)
+                }
+            }
+        }
+        return Text(a)
+    }
 }
 
 private struct MarkdownTable: View {
+    @Environment(\.zoomFactor) var zoom
     let header: [String]
     let align: [MarkdownBlocks.Align]
     let rows: [[String]]
@@ -138,7 +191,7 @@ private struct MarkdownTable: View {
     private func cell(_ text: String, column: Int, header: Bool) -> some View {
         let a = align.indices.contains(column) ? align[column] : .leading
         return inline(text)
-            .font(Theme.font(size: 12.5, weight: header ? .semibold : .regular))
+            .font(Theme.font(size: zoom * 12.5, weight: header ? .semibold : .regular))
             .foregroundStyle(header ? Theme.text : Theme.text)
             .lineSpacing(2)
             .multilineTextAlignment(a == .trailing ? .trailing : a == .center ? .center : .leading)
@@ -184,8 +237,9 @@ private struct MarkdownTable: View {
             }
         }
         for run in a.runs where run.link != nil {
+            // Links read by colour alone; a permanent underline would shout over the headlines.
             a[run.range].foregroundColor = Theme.accent
-            a[run.range].underlineStyle = .single
+            a[run.range].underlineStyle = NSUnderlineStyle(rawValue: 0)
         }
         styled[key] = a
         return a

@@ -39,6 +39,13 @@ import Testing
         #expect(MarkdownBlocks.listMarker("plain") == nil)
     }
 
+    @Test func pastedBulletsParseAsAList() {
+        let blocks = MarkdownBlocks.parse("• Onet: wraca sprawa\n• Google: paragon\n• Trzecia rzecz bez leadu")
+        guard case .list(let items) = blocks.first, blocks.count == 1 else { Issue.record("not one list"); return }
+        #expect(items.map(\.mark) == [.bullet, .bullet, .bullet])
+        #expect(items.map(\.text) == ["Onet: wraca sprawa", "Google: paragon", "Trzecia rzecz bez leadu"])
+    }
+
     @Test func indentCountsTabsAsFour() {
         #expect(MarkdownBlocks.indent("  x") == 2)
         #expect(MarkdownBlocks.indent("\tx") == 4)
