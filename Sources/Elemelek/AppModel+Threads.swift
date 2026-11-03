@@ -66,7 +66,8 @@ extension AppModel {
         // For the timeline's chips every root counts, not only the newest page; stop if the room changes.
         var pages = 0
         repeat {
-            await Log.sync.attempt("thread paginate") { try await svc.paginate() }
+            // A failed page (no network) ends the run; opening the room or the panel again tries anew.
+            guard await Log.sync.attempt("thread paginate", { try await svc.paginate() }) != nil else { break }
             pages += 1
             if case .idle(let end) = svc.paginationState(), end { break }
         } while allPages && pages < 50 && threadService === svc
