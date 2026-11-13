@@ -8,6 +8,7 @@ enum RoomSheet: String, Identifiable {
 
 /// One small form shell shared by the three room sheets.
 private struct SheetFrame<Content: View>: View {
+    @Environment(\.zoomFactor) var zoom
     let title: LocalizedStringKey
     let busy: Bool
     let error: String?
@@ -16,14 +17,14 @@ private struct SheetFrame<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text(title).font(Theme.font(size: 16, weight: .bold, design: .rounded)).foregroundStyle(Theme.text)
+                Text(title).font(Theme.font(size: zoom * 16, weight: .bold, design: .rounded)).foregroundStyle(Theme.text)
                 Spacer()
                 if busy { ProgressView().controlSize(.small) }
                 IconButton(pic: "cross_mark", help: "Close", size: 28, action: close)
             }
             content
             if let error {
-                Text(error).font(Theme.font(size: 12)).foregroundStyle(.red).textSelection(.enabled)
+                Text(error).font(Theme.font(size: zoom * 12)).foregroundStyle(.red).textSelection(.enabled)
             }
         }
         .padding(18).frame(width: 400).background(Theme.background)
@@ -71,6 +72,7 @@ struct NewDirectSheet: View {
 }
 
 private struct UserRow: View {
+    @Environment(\.zoomFactor) var zoom
     let name: String
     let id: String
     let action: () -> Void
@@ -80,8 +82,8 @@ private struct UserRow: View {
             HStack(spacing: 10) {
                 Avatar(name: name, size: 28)
                 VStack(alignment: .leading, spacing: 0) {
-                    Text(name).font(Theme.font(size: 13)).foregroundStyle(Theme.text).lineLimit(1)
-                    if name != id { Text(id).font(Theme.font(size: 11)).foregroundStyle(Theme.dim).lineLimit(1) }
+                    Text(name).font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.text).lineLimit(1)
+                    if name != id { Text(id).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).lineLimit(1) }
                 }
                 Spacer()
             }

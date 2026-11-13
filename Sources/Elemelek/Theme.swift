@@ -31,6 +31,8 @@ enum Theme {
 
     static let radius: CGFloat = 12
     static let chromeRadius: CGFloat = 18
+    /// The reading measure for message text: long lines tire the eye, wider ones add nothing.
+    static let readingWidth: CGFloat = 680
 
     /// A translucent wash for hover and chips: white on dark, black on light.
     static func wash(_ opacity: Double) -> Color {
@@ -46,6 +48,19 @@ enum Theme {
         var h: UInt64 = 5381
         for u in s.unicodeScalars { h = (h &* 33) &+ UInt64(u.value) }
         return Color(hue: Double(h % 360) / 360, saturation: 0.55, brightness: 0.88)
+    }
+}
+
+/// Manual text zoom (Cmd+/Cmd−/Cmd0): every `Theme.font` size multiplies by it.
+/// Set once at the scene root from `AppModel.zoom`; views read it next to the call.
+private struct ZoomFactorKey: EnvironmentKey {
+    static let defaultValue: CGFloat = 1
+}
+
+extension EnvironmentValues {
+    var zoomFactor: CGFloat {
+        get { self[ZoomFactorKey.self] }
+        set { self[ZoomFactorKey.self] = newValue }
     }
 }
 
@@ -65,6 +80,7 @@ struct Surface: ViewModifier {
 
 /// The navigation layer: Liquid Glass on macOS 26, a panel with a hairline before.
 struct Chrome: ViewModifier {
+    @Environment(\.zoomFactor) var zoom
     var radius: CGFloat
     func body(content: Content) -> some View {
         let shape = RoundedRectangle(cornerRadius: radius, style: .continuous)
@@ -88,9 +104,9 @@ extension View {
     func chrome(radius: CGFloat = Theme.chromeRadius) -> some View { modifier(Chrome(radius: radius)) }
 
     /// A text field in a quiet well.
-    func kitField() -> some View {
+    func kitField(zoom: CGFloat = 1) -> some View {
         textFieldStyle(.plain)
-            .font(Theme.font(size: 13))
+            .font(Theme.font(size: zoom * 13))
             .padding(.horizontal, 11).padding(.vertical, 8)
             .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.inset))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).strokeBorder(Theme.hairline))
@@ -110,6 +126,7 @@ struct KitButton: ButtonStyle {
 }
 
 private struct KitButtonBody: View {
+    @Environment(\.zoomFactor) var zoom
         let configuration: ButtonStyleConfiguration
         let tint: Color?
         let prominent: Bool
@@ -122,7 +139,7 @@ private struct KitButtonBody: View {
                 : (tint.map { $0.opacity(configuration.isPressed ? 0.26 : hovering ? 0.22 : 0.14) }
                     ?? Theme.wash(configuration.isPressed ? 0.16 : hovering ? 0.12 : 0.06))
             configuration.label
-                .font(Theme.font(size: compact ? 11 : 13, weight: prominent ? .semibold : .medium))
+                .font(Theme.font(size: zoom * (compact ? 11 : 13), weight: prominent ? .semibold : .medium))
                 .foregroundStyle(prominent ? Color.white : (tint ?? Theme.text))
                 .padding(.horizontal, compact ? 8 : 14).padding(.vertical, compact ? 3 : 7)
                 .background(fill, in: Capsule(style: .continuous))

@@ -2,6 +2,7 @@ import SwiftUI
 
 /// A grid of emoji to pick a reaction from, the recently used ones first.
 struct EmojiPicker: View {
+    @Environment(\.zoomFactor) var zoom
     let recent: [String]
     let onPick: (String) -> Void
 
@@ -29,7 +30,7 @@ struct EmojiPicker: View {
 
     private func section(_ title: LocalizedStringKey, _ emojis: [String]) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.dim)
+            Text(title).font(Theme.font(size: zoom * 11, weight: .semibold)).foregroundStyle(Theme.dim)
             LazyVGrid(columns: Array(repeating: GridItem(.fixed(34), spacing: 2), count: 8), spacing: 2) {
                 ForEach(Array(emojis.enumerated()), id: \.offset) { _, e in
                     EmojiCell(emoji: e) { onPick(e) }

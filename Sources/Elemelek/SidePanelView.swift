@@ -20,6 +20,7 @@ struct SidePanelView: View {
 }
 
 private struct PanelHeader: View {
+    @Environment(\.zoomFactor) var zoom
     let title: LocalizedStringKey
     var back: (() -> Void)?
     let close: () -> Void
@@ -27,7 +28,7 @@ private struct PanelHeader: View {
         HStack(spacing: 8) {
             if let back { IconButton(pic: "right_arrow_curving_left", help: "Back", action: back) }
             Pic(name: "thread", size: 18)
-            Text(title).font(Theme.font(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+            Text(title).font(Theme.font(size: zoom * 14, weight: .semibold)).foregroundStyle(Theme.text)
             Spacer()
             IconButton(pic: "cross_mark", help: "Close", action: close)
         }
@@ -38,13 +39,14 @@ private struct PanelHeader: View {
 }
 
 private struct ThreadListPanel: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     var body: some View {
         PanelHeader(title: "Threads") { model.hideSidePanel() }
         if model.threads.isEmpty {
             VStack(spacing: 10) {
                 Pic(name: "thread", size: 44).opacity(0.9)
-                Text("No threads in this room yet").font(Theme.font(size: 13)).foregroundStyle(Theme.dim)
+                Text("No threads in this room yet").font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.dim)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
@@ -59,6 +61,7 @@ private struct ThreadListPanel: View {
 }
 
 private struct ThreadRow: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     let entry: ThreadEntry
     let action: () -> Void
@@ -68,23 +71,23 @@ private struct ThreadRow: View {
             HStack(alignment: .top, spacing: 10) {
                 Avatar(name: entry.rootSender, size: 32)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(entry.rootSender).font(Theme.font(size: 12, weight: .semibold))
+                    Text(entry.rootSender).font(Theme.font(size: zoom * 12, weight: .semibold))
                         .foregroundStyle(Theme.tint(for: entry.rootSender))
                     // The thread list keeps the event as first fetched; the room timeline retries decryption, so
                     // a root that is readable there is shown from there.
                     if entry.rootLocked, let r = model.timeline?.rows.first(where: { $0.eventID == entry.id }), !r.locked {
-                        Text(r.text).font(Theme.font(size: 13)).foregroundStyle(Theme.text).lineLimit(2)
+                        Text(r.text).font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.text).lineLimit(2)
                             .multilineTextAlignment(.leading)
                     } else if entry.rootLocked {
                         LockedLine(text: entry.rootText)
                     } else {
-                        Text(entry.rootText).font(Theme.font(size: 13)).foregroundStyle(Theme.text).lineLimit(2)
+                        Text(entry.rootText).font(Theme.font(size: zoom * 13)).foregroundStyle(Theme.text).lineLimit(2)
                             .multilineTextAlignment(.leading)
                     }
                     HStack(spacing: 6) {
-                        Text("Replies: \(entry.replies)").font(Theme.font(size: 11, weight: .semibold)).foregroundStyle(Theme.accent)
+                        Text("Replies: \(entry.replies)").font(Theme.font(size: zoom * 11, weight: .semibold)).foregroundStyle(Theme.accent)
                         if let l = entry.latest {
-                            Text(l).font(Theme.font(size: 11)).foregroundStyle(Theme.dim).lineLimit(1)
+                            Text(l).font(Theme.font(size: zoom * 11)).foregroundStyle(Theme.dim).lineLimit(1)
                         }
                     }
                 }

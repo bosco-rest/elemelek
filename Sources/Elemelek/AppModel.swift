@@ -59,6 +59,15 @@ final class AppModel {
     var indexTask: Task<Void, Never>?
     var indexStarted = false
 
+    /// Manual text zoom (Cmd+/Cmd−/Cmd0); every font size multiplies by it.
+    var zoom: Double = TextZoom.stored() {
+        didSet { UserDefaults.standard.set(zoom, forKey: TextZoom.key) }
+    }
+
+    func zoomIn() { zoom = TextZoom.zoomIn(zoom) }
+    func zoomOut() { zoom = TextZoom.zoomOut(zoom) }
+    func resetZoom() { zoom = TextZoom.default }
+
     var verified = true
     var verification: VerificationFlow = .idle
     var verifyController: SessionVerificationController?

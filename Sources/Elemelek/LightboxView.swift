@@ -3,6 +3,7 @@ import AppKit
 
 /// A picture opened full size over the window: dimmed backdrop, pinch or double-click to zoom, drag to pan.
 struct LightboxView: View {
+    @Environment(\.zoomFactor) var zoom
     @Environment(AppModel.self) var model
     let box: Lightbox
     @State private var image: NSImage?
@@ -40,7 +41,7 @@ struct LightboxView: View {
             VStack {
                 HStack(spacing: 6) {
                     if let name = box.row.imageName {
-                        Text(name).font(Theme.font(size: 13, weight: .medium)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                        Text(name).font(Theme.font(size: zoom * 13, weight: .medium)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
                     }
                     Spacer()
                     IconButton(pic: "memo", help: "Save", size: 36) { save() }.disabled(data == nil)

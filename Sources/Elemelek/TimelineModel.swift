@@ -56,6 +56,12 @@ struct TimelineRow: Identifiable, Hashable {
     var imageName: String? { media?.name }
 }
 
+extension TimelineRow: ComposerMessage {}
+
+extension TimelineRow: GroupedMessage {
+    var senderName: String { sender }
+}
+
 final class TLListener: TimelineListener, @unchecked Sendable {
     let cb: @Sendable ([TimelineDiff]) -> Void
     init(_ f: @escaping @Sendable ([TimelineDiff]) -> Void) { cb = f }
