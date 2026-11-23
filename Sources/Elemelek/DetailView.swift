@@ -70,6 +70,8 @@ struct TimelineList: View {
     /// Starts true: a short room never scrolls, so the change that would set it might never come.
     @State private var nearTop = true
     @State private var pageAnchor: String?
+    /// Follows new messages while the reader is at the bottom; scrolling up to read history lets go.
+    @State private var pinned = true
 
     /// Lazy, so only rows near the viewport hold views and layers; pictures reserve their size up front
     /// so rows keep their height while loading, and the bottom anchor holds.
@@ -91,6 +93,15 @@ struct TimelineList: View {
         .defaultScrollAnchor(.bottom, for: .sizeChanges)
         .background(Theme.background)
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y < 300 } action: { nearTop = $1 }
+        .onScrollGeometryChange(for: ScrollPin.Geometry.self) {
+            ScrollPin.Geometry(offsetY: $0.contentOffset.y, contentHeight: $0.contentSize.height,
+                               viewportHeight: $0.containerSize.height)
+        } action: { old, new in pinned = ScrollPin.next(wasPinned: pinned, old: old, new: new) }
+        // A new message at the end (someone else's or our own): show it, unless the reader is up in history.
+        .onChange(of: tl.rows.last?.id) { _, last in
+            guard pinned, last != nil else { return }
+            withAnimation(.easeOut(duration: 0.2)) { position.scrollTo(edge: .bottom) }
+        }
         .task(id: PageKey(nearTop: nearTop, tick: tl.pageTick)) {
             // Let the jump back to the anchor land first, so the offset says where the reader really is.
             // After a failed page, wait longer each time; after a few, leave it to the "Try again" link.
