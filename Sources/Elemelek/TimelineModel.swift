@@ -114,7 +114,8 @@ final class TimelineModel: Identifiable {
     private let diffs: AsyncStream<(listener: Int, diffs: [TimelineDiff])>
     private let diffSink: AsyncStream<(listener: Int, diffs: [TimelineDiff])>.Continuation
     private var listener = 0
-    /// Times the listener was replaced after our rows stopped matching the SDK's; bounded so it cannot loop.
+    /// Times in a row the listener was replaced after our rows stopped matching the SDK's; bounded so it cannot
+    /// loop, and cleared once a whole timeline arrives cleanly.
     private var relistens = 0
     private var memberProfiles: [String: (name: String, avatar: String?)] = [:]
     private var pendingProfileFetches: Set<String> = []
@@ -154,7 +155,6 @@ final class TimelineModel: Identifiable {
         listener += 1
         let n = listener, sink = diffSink
         handle?.cancel()
-        paging.relisten()
         handle = await timeline.addListener(listener: TLListener { sink.yield((n, $0)) })
     }
 
@@ -261,6 +261,8 @@ final class TimelineModel: Identifiable {
                 relistens += 1
                 Task { [weak self] in await self?.listen() }
             }
+        } else if out.reset {
+            relistens = 0
         }
         let ids = Set(entries.lazy.map(\.id).filter { !$0.isEmpty })
         switch paging.received(out, oldestBefore: oldest, idsAfter: ids) {

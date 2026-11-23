@@ -89,15 +89,28 @@ import Testing
         #expect(!r.paging.hitStart)
     }
 
-    @Test func aNewListenersFirstResetIsNotADrop() {
-        // After our rows stopped matching the SDK the model listens again; that listener starts with a reset too.
+    @Test func aNewListenersResetIsJudgedLikeAnyOther() {
+        // After our rows stopped matching the SDK the model listens again; the old rows stay until the new
+        // listener's first reset. If a limited sync cut the timeline meanwhile, that reset lost the oldest event.
         var r = Room()
         _ = r.receive([.reset(["a", "b"])])
         _ = r.page(hitStart: true)
-        r.paging.relisten()
-        let b10 = r.receive([.reset(["c"])])
-        #expect(b10 == .kept)
+        let cut = r.receive([.reset(["e"])])
+        #expect(cut == .dropped)
+        #expect(!r.paging.hitStart)
+
+        // The same timeline sent again by the new listener is no drop.
+        _ = r.page(hitStart: true)
+        let same = r.receive([.reset(["e", "f"])])
+        #expect(same == .kept)
         #expect(r.paging.hitStart)
+    }
+
+    @Test func aClearOntoEmptyRowsIsNotADrop() {
+        var r = Room()
+        let b = r.receive([.clear, .append(["a"])])
+        #expect(b == .kept)
+        #expect(r.paging.epoch == 0)
     }
 
     @Test func ordinaryNewMessagesChangeNothing() {
