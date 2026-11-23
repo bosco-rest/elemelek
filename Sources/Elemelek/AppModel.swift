@@ -80,6 +80,7 @@ final class AppModel {
 
     var client: Client?
     var syncService: SyncService?
+    var roomListService: RoomListService?
     var roomList: RoomList?
     var roomObjects: [Room] = []
     /// Display names of the people typing in the open room (not you).
@@ -153,7 +154,9 @@ final class AppModel {
         do {
             let sync = try await c.syncService().finish()
             syncService = sync
-            let list = try await sync.roomListService().allRooms()
+            let service = sync.roomListService()
+            roomListService = service
+            let list = try await service.allRooms()
             roomList = list
             let listener = RoomsListener { [weak self] updates in
                 Task { @MainActor in self?.apply(updates) }
@@ -189,7 +192,7 @@ final class AppModel {
         await syncService?.stop()
         indexTask?.cancel(); indexStarted = false
         infoHandles = [:]; roomInfos = [:]; NSApp.dockTile.badgeLabel = nil
-        client = nil; syncService = nil; roomObjects = []; rooms = []; timeline = nil; thread = nil; selectedRoomID = nil
+        client = nil; syncService = nil; roomListService = nil; roomObjects = []; rooms = []; timeline = nil; thread = nil; selectedRoomID = nil
         sidePanel = .none; threads = []; lightbox = nil
         wipeStores()
         state = .loggedOut
@@ -258,6 +261,7 @@ final class AppModel {
         threads = []; rawThreads = []; threadService = nil; threadHandle = nil; threadPageHandle = nil
         // The old room's rows and pictures are gone now; hand the freed pages back instead of keeping them.
         malloc_zone_pressure_relief(nil, 0)
+        Task { await subscribeToOpenRoom() }
         guard let id, let client else { return }
         // A room the list has not shown yet (a notification clicked at launch, a room just joined) is still a room.
         guard let room = roomObjects.first(where: { $0.id() == id }) ?? (try? client.getRoom(roomId: id)) else {
@@ -289,7 +293,28 @@ final class AppModel {
         }
     }
 
-
+    /// Only a subscribed room gets every new event from sync. The room list asks for one event per room per
+    /// response; when more arrive at once the answer is "limited" and the SDK drops the room's loaded timeline,
+    /// keeping only the newest event with a gap before it — the open room would lose messages. So the open room
+    /// is subscribed (twenty events per response, like Element X does), and the one left behind is not:
+    /// `setRoomSubscriptions` sets the subscriptions to exactly these rooms, removing the others (matrix-sdk
+    /// `SlidingSync::set_room_subscriptions`), so an empty list unsubscribes all.
+    func subscribeToOpenRoom() async {
+        guard let service = roomListService else { return }
+        var wanted = selectedRoomID
+        // Two quick picks can finish out of order; repeat until the call that landed last is for the room now open.
+        for _ in 0..<5 {
+            do {
+                try await service.setRoomSubscriptions(roomIds: wanted.map { [$0] } ?? [])
+                Log.sync.debug("room subscription set (\(wanted == nil ? 0 : 1, privacy: .public) rooms)")
+            } catch {
+                Log.sync.error("room subscription failed: \(error.localizedDescription, privacy: .public)")
+                return
+            }
+            if selectedRoomID == wanted { return }
+            wanted = selectedRoomID
+        }
+    }
 }
 
 enum SidePanel: Equatable {
