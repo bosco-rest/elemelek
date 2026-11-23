@@ -114,9 +114,11 @@ final class TimelineModel: Identifiable {
     private let diffs: AsyncStream<(listener: Int, diffs: [TimelineDiff])>
     private let diffSink: AsyncStream<(listener: Int, diffs: [TimelineDiff])>.Continuation
     private var listener = 0
-    /// Times in a row the listener was replaced after our rows stopped matching the SDK's; bounded so it cannot
-    /// loop, and cleared once a whole timeline arrives cleanly.
+    /// Times the listener was replaced after our rows stopped matching the SDK's. At most three, so a mismatch that
+    /// keeps coming back does not replace it forever; forgotten only after a long run of clean batches (a new
+    /// listener's first `reset` alone does not count), so recovery still works much later.
     private var relistens = 0
+    private var cleanBatches = 0
     private var memberProfiles: [String: (name: String, avatar: String?)] = [:]
     private var pendingProfileFetches: Set<String> = []
 
@@ -257,12 +259,14 @@ final class TimelineModel: Identifiable {
             // Our copy no longer matches the SDK's, and positional diffs cannot mend it: a new listener starts
             // again from the whole timeline.
             Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK, listening again")
+            cleanBatches = 0
             if relistens < 3 {
                 relistens += 1
                 Task { [weak self] in await self?.listen() }
             }
-        } else if out.reset {
-            relistens = 0
+        } else if relistens > 0 {
+            cleanBatches += 1
+            if cleanBatches >= 50 { relistens = 0; cleanBatches = 0 }
         }
         let ids = Set(entries.lazy.map(\.id).filter { !$0.isEmpty })
         switch paging.received(out, oldestBefore: oldest, idsAfter: ids) {
