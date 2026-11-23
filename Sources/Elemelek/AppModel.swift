@@ -296,7 +296,9 @@ final class AppModel {
     /// Only a subscribed room gets every new event from sync. The room list asks for one event per room per
     /// response; when more arrive at once the answer is "limited" and the SDK drops the room's loaded timeline,
     /// keeping only the newest event with a gap before it — the open room would lose messages. So the open room
-    /// is subscribed (twenty events per response, like Element X does), and the one left behind is not.
+    /// is subscribed (twenty events per response, like Element X does), and the one left behind is not:
+    /// `setRoomSubscriptions` sets the subscriptions to exactly these rooms, removing the others (matrix-sdk
+    /// `SlidingSync::set_room_subscriptions`), so an empty list unsubscribes all.
     func subscribeToOpenRoom() async {
         guard let service = roomListService else { return }
         var wanted = selectedRoomID

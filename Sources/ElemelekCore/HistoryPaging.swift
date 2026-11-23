@@ -9,14 +9,33 @@ public struct HistoryPaging: Equatable, Sendable {
     /// Bumped each time the SDK drops the loaded timeline. A page asked for before then answered for a timeline
     /// that is gone, so its "start reached" says nothing about the new one.
     public private(set) var epoch = 0
+    /// The first batch from a listener is the timeline as it stands, not a change to it.
+    public private(set) var seenFirstBatch = false
 
     public init() {}
 
-    /// The SDK replaced everything it had loaded (a `clear` or `reset` after the first batch).
-    public mutating func dropped() {
+    /// What one batch of diffs means for paging.
+    public enum Batch: Equatable, Sendable {
+        /// Nothing to do.
+        case kept
+        /// The SDK dropped what was loaded: page back again.
+        case dropped
+    }
+
+    /// Reads one applied batch. `oldestBefore` is the oldest event's ID before the batch, `idsAfter` every event ID
+    /// after it: a `reset` that still holds the oldest event is the same timeline sent again (a listener that fell
+    /// behind), one that lost it was cut down to its newest events. A `clear` is always a drop.
+    public mutating func received(_ out: ListDiffOutcome, oldestBefore: String?, idsAfter: Set<String>) -> Batch {
+        guard seenFirstBatch else { seenFirstBatch = true; return .kept }
+        let lostOldest = oldestBefore.map { !idsAfter.contains($0) } ?? false
+        guard out.cleared || (out.reset && lostOldest) else { return .kept }
         epoch += 1
         hitStart = false
+        return .dropped
     }
+
+    /// A new listener on the same timeline: its first batch is the whole timeline again.
+    public mutating func relisten() { seenFirstBatch = false }
 
     /// Taken when a page is asked for, handed back to `finished`.
     public var ticket: Int { epoch }

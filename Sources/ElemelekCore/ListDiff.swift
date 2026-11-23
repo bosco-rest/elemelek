@@ -16,11 +16,16 @@ public enum ListDiff<Element> {
 
 /// What a batch of diffs did besides changing the list.
 public struct ListDiffOutcome: Equatable, Sendable {
-    /// A `clear` or `reset` replaced everything that was there: what was loaded before is gone.
-    public var dropped = false
+    /// A `clear` emptied the list: whatever comes after it is all that is left.
+    public var cleared = false
+    /// A `reset` replaced the whole list. It may be the same state sent again (a listener that fell behind) or a
+    /// smaller one; `HistoryPaging.received` tells them apart.
+    public var reset = false
     /// Diffs that pointed past the end of our copy, so it no longer matches the SDK's; they are skipped.
     public var outOfRange = 0
-    public init(dropped: Bool = false, outOfRange: Int = 0) { self.dropped = dropped; self.outOfRange = outOfRange }
+    public init(cleared: Bool = false, reset: Bool = false, outOfRange: Int = 0) {
+        self.cleared = cleared; self.reset = reset; self.outOfRange = outOfRange
+    }
 }
 
 extension Array {
@@ -31,7 +36,7 @@ extension Array {
         for d in diffs {
             switch d {
             case .append(let v): self += v
-            case .clear: removeAll(); out.dropped = true
+            case .clear: removeAll(); out.cleared = true
             case .pushFront(let v): insert(v, at: 0)
             case .pushBack(let v): append(v)
             case .popFront: if !isEmpty { removeFirst() }
@@ -40,7 +45,7 @@ extension Array {
             case .set(let i, let v): if indices.contains(i) { self[i] = v } else { out.outOfRange += 1 }
             case .remove(let i): if indices.contains(i) { remove(at: i) } else { out.outOfRange += 1 }
             case .truncate(let n): self = Array(prefix(Swift.max(0, n)))
-            case .reset(let v): self = v; out.dropped = true
+            case .reset(let v): self = v; out.reset = true
             }
         }
         return out

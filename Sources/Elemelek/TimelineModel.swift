@@ -110,8 +110,12 @@ final class TimelineModel: Identifiable {
     }()
     @ObservationIgnored private nonisolated(unsafe) var handle: TaskHandle?
     /// Diffs from the SDK, in the order it sent them; finished when the model goes, which ends its reader.
-    private let diffs: AsyncStream<[TimelineDiff]>
-    private let diffSink: AsyncStream<[TimelineDiff]>.Continuation
+    /// Each batch carries the number of the listener that sent it, so a replaced listener's last batches are dropped.
+    private let diffs: AsyncStream<(listener: Int, diffs: [TimelineDiff])>
+    private let diffSink: AsyncStream<(listener: Int, diffs: [TimelineDiff])>.Continuation
+    private var listener = 0
+    /// Times the listener was replaced after our rows stopped matching the SDK's; bounded so it cannot loop.
+    private var relistens = 0
     private var memberProfiles: [String: (name: String, avatar: String?)] = [:]
     private var pendingProfileFetches: Set<String> = []
 
@@ -121,7 +125,7 @@ final class TimelineModel: Identifiable {
         self.roomID = roomID
         self.threadRoot = threadRoot
         self.ownID = (try? client.userId()) ?? ""
-        (diffs, diffSink) = AsyncStream.makeStream(of: [TimelineDiff].self)
+        (diffs, diffSink) = AsyncStream.makeStream(of: (listener: Int, diffs: [TimelineDiff]).self)
     }
 
     deinit {
@@ -132,16 +136,26 @@ final class TimelineModel: Identifiable {
     func start() async {
         // Diffs are positional (insert at 3, remove 7), so they must be applied in the order they were sent.
         // A Task per callback does not promise that; one stream read by one task does.
-        let diffs = diffs, sink = diffSink
-        handle = await timeline.addListener(listener: TLListener { sink.yield($0) })
+        let diffs = diffs
+        await listen()
         Task { [weak self] in
-            for await d in diffs {
+            for await batch in diffs {
                 guard let self else { return }
-                self.apply(d)
+                guard batch.listener == self.listener else { continue }
+                self.apply(batch.diffs)
             }
         }
         await loadMore()
         Task { [weak self] in await self?.loadRoomMembers() }
+    }
+
+    /// Adds a listener; its first batch is the whole timeline as a `reset`.
+    private func listen() async {
+        listener += 1
+        let n = listener, sink = diffSink
+        handle?.cancel()
+        paging.relisten()
+        handle = await timeline.addListener(listener: TLListener { sink.yield((n, $0)) })
     }
 
     private var lastRead: String?
@@ -194,8 +208,6 @@ final class TimelineModel: Identifiable {
         var rawReceipts: [(userID: String, timestamp: UInt64?)] = []
     }
     private var entries: [Entry] = []
-    /// The first batch is the timeline as it stands when the listener is added; only later clears are drops.
-    private var seenFirstBatch = false
 
     private func entry(_ i: TimelineItem) -> Entry {
         var en = Entry(row: Self.row(i, ownID: ownID, profiles: memberProfiles))
@@ -225,6 +237,7 @@ final class TimelineModel: Identifiable {
 
     private func apply(_ diffs: [TimelineDiff]) {
         let before = entries.count
+        let oldest = entries.first { !$0.id.isEmpty }?.id
         let out = entries.apply(diffs.map { d -> ListDiff<Entry> in
             switch d {
             case .append(let v): .append(v.map(entry))
@@ -241,17 +254,27 @@ final class TimelineModel: Identifiable {
             }
         })
         if out.outOfRange > 0 {
-            Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK")
+            // Our copy no longer matches the SDK's, and positional diffs cannot mend it: a new listener starts
+            // again from the whole timeline.
+            Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK, listening again")
+            if relistens < 3 {
+                relistens += 1
+                Task { [weak self] in await self?.listen() }
+            }
         }
-        if out.dropped, seenFirstBatch {
-            // A limited sync (more new events than the sync sent) or a reload: the SDK kept only the newest events
-            // and left a gap before them that only paging backwards fills. Without this a room that had reached its
-            // start stays "complete" and the messages in the gap never show.
-            Log.timeline.notice("SDK dropped the loaded timeline: \(before, privacy: .public) → \(self.entries.count, privacy: .public) items; paging back again")
-            paging.dropped()
+        let ids = Set(entries.lazy.map(\.id).filter { !$0.isEmpty })
+        switch paging.received(out, oldestBefore: oldest, idsAfter: ids) {
+        case .dropped:
+            // A limited sync (more new events than the sync sent): the SDK kept only the newest events and left a
+            // gap before them that only paging backwards fills. Without this a room that had reached its start
+            // stays "complete" and the messages in the gap never show.
+            Log.timeline.notice("SDK dropped the loaded timeline (\(out.cleared ? "clear" : "reset", privacy: .public)): \(before, privacy: .public) → \(self.entries.count, privacy: .public) items; paging back again")
             Task { [weak self] in await self?.loadMore() }
+        case .kept:
+            if out.reset, before > 0 {
+                Log.timeline.debug("timeline sent again whole: \(before, privacy: .public) → \(self.entries.count, privacy: .public) items")
+            }
         }
-        seenFirstBatch = true
         rebuildRows()
         markRead()
         itemIDs = [:]; imageSources = [:]; mediaSources = [:]; thumbSources = [:]

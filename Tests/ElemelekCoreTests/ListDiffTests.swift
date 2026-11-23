@@ -18,16 +18,16 @@ import Testing
         #expect(empty.isEmpty)
     }
 
-    @Test func clearAndResetReportThatEverythingWasDropped() {
+    @Test func clearAndResetAreReported() {
         var a = [1, 2]
         let cleared = a.apply([.clear])
-        #expect(cleared.dropped)
+        #expect(cleared.cleared && !cleared.reset)
         #expect(a.isEmpty)
         let reset = a.apply([.reset([7, 8])])
-        #expect(reset.dropped)
+        #expect(reset.reset && !reset.cleared)
         #expect(a == [7, 8])
         let pushed = a.apply([.pushBack(9)])
-        #expect(!pushed.dropped)
+        #expect(pushed == ListDiffOutcome())
     }
 
     @Test func diffsPastTheEndAreCountedNotCrashed() {
