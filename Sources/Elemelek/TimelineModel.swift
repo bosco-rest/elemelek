@@ -85,7 +85,9 @@ final class TimelineModel: Identifiable {
     var replyingTo: TimelineRow?
     var editing: TimelineRow?
     var error: String?
-    var hitStart = false
+    /// Whether the room's start is loaded; reset when the SDK drops the timeline (see `HistoryPaging`).
+    private(set) var paging = HistoryPaging()
+    var hitStart: Bool { paging.hitStart }
     var loadingMore = false
     /// Why the last page of older messages failed, if it did; cleared by the next page that loads.
     var pageError: String?
@@ -158,13 +160,24 @@ final class TimelineModel: Identifiable {
         guard !loadingMore, !hitStart else { return }
         loadingMore = true
         defer { loadingMore = false; pageTick += 1 }
-        do {
-            hitStart = try await timeline.paginateBackwards(numEvents: 40)
-            pageError = nil; pageFailures = 0
-        } catch {
-            // Kept apart from `error` (a failed send): one bad page must not stop paging for good.
-            Log.timeline.error("load older messages failed: \(error.localizedDescription, privacy: .public)")
-            pageError = "\(error)"; pageFailures += 1
+        // A page that was under way when the SDK dropped the timeline filled one that is gone: page again for the
+        // new one (a few times at most, should the drops keep coming).
+        for _ in 0..<3 {
+            let ticket = paging.ticket
+            do {
+                let start = try await timeline.paginateBackwards(numEvents: 40)
+                pageError = nil; pageFailures = 0
+                if paging.finished(ticket: ticket, hitStart: start) {
+                    Log.timeline.debug("page loaded: \(self.entries.count, privacy: .public) items, start \(start, privacy: .public)")
+                    return
+                }
+                Log.timeline.notice("timeline dropped while a page loaded; paging the new one")
+            } catch {
+                // Kept apart from `error` (a failed send): one bad page must not stop paging for good.
+                Log.timeline.error("load older messages failed: \(error.localizedDescription, privacy: .public)")
+                pageError = "\(error)"; pageFailures += 1
+                return
+            }
         }
     }
 
@@ -181,6 +194,8 @@ final class TimelineModel: Identifiable {
         var rawReceipts: [(userID: String, timestamp: UInt64?)] = []
     }
     private var entries: [Entry] = []
+    /// The first batch is the timeline as it stands when the listener is added; only later clears are drops.
+    private var seenFirstBatch = false
 
     private func entry(_ i: TimelineItem) -> Entry {
         var en = Entry(row: Self.row(i, ownID: ownID, profiles: memberProfiles))
@@ -209,21 +224,34 @@ final class TimelineModel: Identifiable {
     }
 
     private func apply(_ diffs: [TimelineDiff]) {
-        for d in diffs {
+        let before = entries.count
+        let out = entries.apply(diffs.map { d -> ListDiff<Entry> in
             switch d {
-            case .append(let v): entries += v.map(entry)
-            case .clear: entries = []
-            case .pushFront(let v): entries.insert(entry(v), at: 0)
-            case .pushBack(let v): entries.append(entry(v))
-            case .popFront: if !entries.isEmpty { entries.removeFirst() }
-            case .popBack: if !entries.isEmpty { entries.removeLast() }
-            case .insert(let i, let v): entries.insert(entry(v), at: Int(i))
-            case .set(let i, let v): entries[Int(i)] = entry(v)
-            case .remove(let i): entries.remove(at: Int(i))
-            case .truncate(let n): entries = Array(entries.prefix(Int(n)))
-            case .reset(let v): entries = v.map(entry)
+            case .append(let v): .append(v.map(entry))
+            case .clear: .clear
+            case .pushFront(let v): .pushFront(entry(v))
+            case .pushBack(let v): .pushBack(entry(v))
+            case .popFront: .popFront
+            case .popBack: .popBack
+            case .insert(let i, let v): .insert(Int(i), entry(v))
+            case .set(let i, let v): .set(Int(i), entry(v))
+            case .remove(let i): .remove(Int(i))
+            case .truncate(let n): .truncate(Int(n))
+            case .reset(let v): .reset(v.map(entry))
             }
+        })
+        if out.outOfRange > 0 {
+            Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK")
         }
+        if out.dropped, seenFirstBatch {
+            // A limited sync (more new events than the sync sent) or a reload: the SDK kept only the newest events
+            // and left a gap before them that only paging backwards fills. Without this a room that had reached its
+            // start stays "complete" and the messages in the gap never show.
+            Log.timeline.notice("SDK dropped the loaded timeline: \(before, privacy: .public) → \(self.entries.count, privacy: .public) items; paging back again")
+            paging.dropped()
+            Task { [weak self] in await self?.loadMore() }
+        }
+        seenFirstBatch = true
         rebuildRows()
         markRead()
         itemIDs = [:]; imageSources = [:]; mediaSources = [:]; thumbSources = [:]
@@ -311,7 +339,7 @@ final class TimelineModel: Identifiable {
             }
         }
         if changed {
-            rows = entries.compactMap(\.row)
+            rebuildRows()
         }
     }
 
