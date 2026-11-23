@@ -258,11 +258,14 @@ final class TimelineModel: Identifiable {
         if out.outOfRange > 0 {
             // Our copy no longer matches the SDK's, and positional diffs cannot mend it: a new listener starts
             // again from the whole timeline.
-            Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK, listening again")
             cleanBatches = 0
             if relistens < 3 {
                 relistens += 1
+                Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK, listening again (\(self.relistens, privacy: .public)/3)")
                 Task { [weak self] in await self?.listen() }
+            } else {
+                // Rows stay out of step (messages may be missing) until a long clean run or the room is opened again.
+                Log.timeline.fault("timeline diff out of range (\(out.outOfRange, privacy: .public)); rows no longer match the SDK, giving up after 3 relistens; reopen the room")
             }
         } else if relistens > 0 {
             cleanBatches += 1
