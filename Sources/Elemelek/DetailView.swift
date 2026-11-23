@@ -95,7 +95,7 @@ struct TimelineList: View {
         .onScrollGeometryChange(for: Bool.self) { $0.contentOffset.y < 300 } action: { nearTop = $1 }
         .onScrollGeometryChange(for: ScrollPin.Geometry.self) {
             ScrollPin.Geometry(offsetY: $0.contentOffset.y, contentHeight: $0.contentSize.height,
-                               viewportHeight: $0.containerSize.height)
+                               viewportHeight: $0.containerSize.height, zoom: zoom)
         } action: { old, new in pinned = ScrollPin.next(wasPinned: pinned, old: old, new: new) }
         // A new message at the end (someone else's or our own): show it, unless the reader is up in history.
         .onChange(of: tl.rows.last?.id) { _, last in
